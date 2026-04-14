@@ -1,0 +1,2060 @@
+/**
+ * ============================================================
+ * 双碳数据采集系统 — 后端源代码
+ * 技术栈: Express + TypeScript + InfluxDB 2.x + SQLite + Socket.IO
+ * ============================================================
+ */
+
+
+// ===========================================================
+// 文件: backend/src/index.ts
+// 说明: 服务器入口文件
+// ===========================================================
+
+import express from 'express'
+import cors from 'cors'
+import helmet from 'helmet'
+import compression from 'compression'
+import { createServer } from 'http'
+import { Server } from 'socket.io'
+import dotenv from 'dotenv'
+import { logger } from './utils/logger'
+import { errorHandler } from './middleware/errorHandler'
+import { rateLimiter } from './middleware/rateLimiter'
+import routes from './routes'
+import { initializeDatabase, closeDatabase } from './config/database'
+import { initializeInfluxDB, closeInfluxDB } from './config/influxdb'
+import { initializeMQTT, closeMQTT } from './config/mqtt'
+import { initializeSocketIO } from './config/socketio'
+import { UserModel } from './models/user.model'
+import { startDataSimulator } from './services/dataSimulator.service'
+import { startScheduler } from './services/scheduler.service'
+
+dotenv.config()
+
+const app = express()
+const httpServer = createServer(app)
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true,
+    methods: ['GET', 'POST'],
+  },
+})
+
+// Middleware
+app.use(helmet())
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*', credentials: true }))
+app.use(compression())
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.use(rateLimiter)
+
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() })
+})
+
+// API routes
+app.use('/api/v1', routes)
+
+// Socket.IO
+initializeSocketIO(io)
+
+// Error handling
+app.use(errorHandler)
+
+// Start server
+const PORT = process.env.PORT || 50003
+
+async function startServer() {
+  try {
+    // Initialize databases
+    initializeDatabase()
+    await initializeInfluxDB()
+    await initializeMQTT()
+
+    // Initialize default users
+    await UserModel.initialize()
+    logger.info('User model initialized')
+
+    // Start data simulator (dev mode)
+    startDataSimulator()
+
+    // Start scheduled jobs
+    startScheduler()
+
+    httpServer.listen(PORT, () => {
+      logger.info(`双碳数据采集系统后端启动 - 端口 ${PORT}`)
+      logger.info(`环境: ${process.env.NODE_ENV}`)
+    })
+  } catch (error) {
+    logger.error('Failed to start server:', error)
+    process.exit(1)
+  }
+}
+
+startServer()
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received: shutting down')
+  await closeInfluxDB()
+  closeMQTT()
+  closeDatabase()
+  httpServer.close(() => {
+    logger.info('Server closed')
+    process.exit(0)
+  })
+})
+
+
+// ===========================================================
+// 文件: backend/src/config/influxdb.ts
+// 说明: InfluxDB 2.x 连接配置
+// ===========================================================
+
+import { InfluxDB, WriteApi, QueryApi } from '@influxdata/influxdb-client'
+import { logger } from '../utils/logger'
+
+const url = process.env.INFLUXDB_URL || 'http://localhost:8086'
+const token = process.env.INFLUXDB_TOKEN || ''
+const org = process.env.INFLUXDB_ORG || 'carbon-system'
+
+export const BUCKETS = {
+  ENERGY_REALTIME: 'energy_realtime',
+  ENERGY_HOURLY: 'energy_hourly',
+  ENERGY_DAILY: 'energy_daily',
+  CARBON_EMISSIONS: 'carbon_emissions',
+  DEVICE_STATUS: 'device_status',
+} as const
+
+let influxDB: InfluxDB
+let writeApis: Map<string, WriteApi> = new Map()
+let queryApi: QueryApi
+
+export function getInfluxDB(): InfluxDB {
+  if (!influxDB) {
+    influxDB = new InfluxDB({ url, token })
+  }
+  return influxDB
+}
+
+export function getWriteApi(bucket: string): WriteApi {
+  if (!writeApis.has(bucket)) {
+    const api = getInfluxDB().getWriteApi(org, bucket, 's')
+    writeApis.set(bucket, api)
+  }
+  return writeApis.get(bucket)!
+}
+
+export function getQueryApi(): QueryApi {
+  if (!queryApi) {
+    queryApi = getInfluxDB().getQueryApi(org)
+  }
+  return queryApi
+}
+
+export async function initializeInfluxDB(): Promise<void> {
+  try {
+    // Verify connection by running a simple query
+    const queryApi = getQueryApi()
+    await new Promise<void>((resolve, reject) => {
+      queryApi.queryRows('buckets()', {
+        next: () => {},
+        error: (err) => reject(err),
+        complete: () => resolve(),
+      })
+    })
+    logger.info('InfluxDB connected successfully')
+  } catch (error) {
+    logger.error('Failed to connect to InfluxDB:', error)
+    logger.warn('InfluxDB is not available — data will not be persisted')
+  }
+}
+
+export async function closeInfluxDB(): Promise<void> {
+  for (const [bucket, api] of writeApis) {
+    try {
+      await api.close()
+      logger.info(`InfluxDB write API closed for bucket: ${bucket}`)
+    } catch (error) {
+      logger.error(`Error closing write API for ${bucket}:`, error)
+    }
+  }
+  writeApis.clear()
+}
+
+
+// ===========================================================
+// 文件: backend/src/config/database.ts
+// 说明: SQLite 数据库配置
+// ===========================================================
+
+import Database from 'better-sqlite3'
+import path from 'path'
+import fs from 'fs'
+import { logger } from '../utils/logger'
+
+const DB_PATH = path.join(__dirname, '../../data/carbon.db')
+let db: Database.Database
+
+export function getDatabase(): Database.Database {
+  if (!db) {
+    const dir = path.dirname(DB_PATH)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    db = new Database(DB_PATH)
+    db.pragma('journal_mode = WAL')
+    db.pragma('foreign_keys = ON')
+  }
+  return db
+}
+
+export function initializeDatabase(): void {
+  const database = getDatabase()
+  // In compiled mode, SQL files are in src/db; in dev mode, also src/db
+  const srcRoot = path.join(__dirname, '../../src')
+  const schemaPath = path.join(srcRoot, 'db/schema.sql')
+  const seedPath = path.join(srcRoot, 'db/seed.sql')
+
+  try {
+    const schema = fs.readFileSync(schemaPath, 'utf-8')
+    database.exec(schema)
+    logger.info('Database schema initialized')
+
+    // Run seed if users table is empty
+    const userCount = database.prepare('SELECT COUNT(*) as count FROM users').get() as any
+    if (userCount.count === 0) {
+      const seed = fs.readFileSync(seedPath, 'utf-8')
+      database.exec(seed)
+      logger.info('Database seeded with default data')
+    }
+  } catch (error) {
+    logger.error('Database initialization failed:', error)
+    throw error
+  }
+}
+
+export function closeDatabase(): void {
+  if (db) {
+    db.close()
+    logger.info('Database connection closed')
+  }
+}
+
+
+// ===========================================================
+// 文件: backend/src/config/mqtt.ts
+// 说明: MQTT 消息队列配置
+// ===========================================================
+
+import mqtt, { MqttClient } from 'mqtt'
+import { logger } from '../utils/logger'
+
+let client: MqttClient | null = null
+
+export function getMQTTClient(): MqttClient | null {
+  return client
+}
+
+export async function initializeMQTT(): Promise<void> {
+  const brokerUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883'
+
+  return new Promise((resolve) => {
+    try {
+      client = mqtt.connect(brokerUrl, {
+        clientId: `carbon-system-${Date.now()}`,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 5000,
+      })
+
+      client.on('connect', () => {
+        logger.info(`MQTT connected to ${brokerUrl}`)
+        // Subscribe to meter data topics
+        client!.subscribe('meters/+/data', { qos: 1 })
+        client!.subscribe('meters/+/status', { qos: 0 })
+        logger.info('MQTT subscribed to meter topics')
+        resolve()
+      })
+
+      client.on('error', (error) => {
+        logger.error('MQTT error:', error)
+      })
+
+      client.on('reconnect', () => {
+        logger.debug('MQTT reconnecting...')
+      })
+
+      // Resolve after timeout even if not connected (non-blocking)
+      setTimeout(() => {
+        if (!client?.connected) {
+          logger.warn('MQTT connection timeout — continuing without MQTT')
+          resolve()
+        }
+      }, 5000)
+    } catch (error) {
+      logger.error('MQTT initialization failed:', error)
+      resolve()
+    }
+  })
+}
+
+export function closeMQTT(): void {
+  if (client) {
+    client.end()
+    logger.info('MQTT connection closed')
+  }
+}
+
+
+// ===========================================================
+// 文件: backend/src/config/socketio.ts
+// 说明: Socket.IO 实时通信配置
+// ===========================================================
+
+import { Server, Socket } from 'socket.io'
+import { logger } from '../utils/logger'
+
+let io: Server
+
+export function initializeSocketIO(socketServer: Server): void {
+  io = socketServer
+
+  io.on('connection', (socket: Socket) => {
+    logger.debug(`Client connected: ${socket.id}`)
+
+    socket.on('subscribe:energy', (payload?: { energyTypes?: string[]; areaIds?: string[] }) => {
+      socket.join('energy:realtime')
+      if (payload?.areaIds) {
+        payload.areaIds.forEach(id => socket.join(`energy:area:${id}`))
+      }
+    })
+
+    socket.on('unsubscribe:energy', () => {
+      socket.leave('energy:realtime')
+    })
+
+    socket.on('subscribe:alarms', () => {
+      socket.join('alarms:all')
+    })
+
+    socket.on('subscribe:dashboard', () => {
+      socket.join('dashboard')
+    })
+
+    socket.on('disconnect', () => {
+      logger.debug(`Client disconnected: ${socket.id}`)
+    })
+  })
+
+  logger.info('Socket.IO initialized')
+}
+
+export function getIO(): Server {
+  if (!io) {
+    throw new Error('Socket.IO not initialized')
+  }
+  return io
+}
+
+export function emitEnergyData(data: any): void {
+  if (io) {
+    io.to('energy:realtime').emit('energy:realtime', data)
+    if (data.areaId) {
+      io.to(`energy:area:${data.areaId}`).emit('energy:realtime', data)
+    }
+  }
+}
+
+export function emitCarbonUpdate(data: any): void {
+  if (io) {
+    io.to('dashboard').emit('carbon:update', data)
+  }
+}
+
+export function emitAlarm(data: any): void {
+  if (io) {
+    io.to('alarms:all').emit('alarm:new', data)
+  }
+}
+
+export function emitDeviceStatus(data: any): void {
+  if (io) {
+    io.to('energy:realtime').emit('device:status', data)
+  }
+}
+
+
+// ===========================================================
+// 文件: backend/src/types/common.types.ts
+// 说明: 公共类型定义
+// ===========================================================
+
+export interface ApiResponse<T = any> {
+  code: number
+  message: string
+  data?: T
+}
+
+export interface PaginatedResponse<T> extends ApiResponse<T[]> {
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface TimeRange {
+  startTime: string
+  endTime: string
+}
+
+export type EnergyType = 'electricity' | 'gas' | 'water' | 'steam'
+export type Scope = 'scope1' | 'scope2' | 'scope3'
+export type DeviceProtocol = 'mqtt' | 'modbus' | 'http' | 'manual'
+export type DeviceStatus = 'online' | 'offline' | 'warning' | 'maintenance'
+export type AlarmSeverity = 'info' | 'warning' | 'critical'
+export type AlarmStatus = 'active' | 'acknowledged' | 'resolved'
+export type UserRole = 'super_admin' | 'admin' | 'operator' | 'viewer'
+
+
+// ===========================================================
+// 文件: backend/src/middleware/authenticate.ts
+// 说明: JWT认证与RBAC权限中间件
+// ===========================================================
+
+import { Request, Response, NextFunction } from 'express'
+import jwt from 'jsonwebtoken'
+
+export interface AuthRequest extends Request {
+  user?: {
+    userId: string
+    username: string
+    role: string
+  }
+}
+
+export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
+  // Dev bypass
+  if (process.env.NODE_ENV === 'development' && !req.headers.authorization) {
+    req.user = { userId: 'dev-user', username: 'admin', role: 'super_admin' }
+    return next()
+  }
+
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) {
+    res.status(401).json({ code: 401, message: '未提供认证令牌' })
+    return
+  }
+
+  const token = authHeader.split(' ')[1]
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any
+    req.user = { userId: decoded.userId, username: decoded.username, role: decoded.role }
+    next()
+  } catch {
+    res.status(401).json({ code: 401, message: '认证令牌无效或已过期' })
+  }
+}
+
+export function authorize(...roles: string[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ code: 401, message: '未认证' })
+      return
+    }
+    if (!roles.includes(req.user.role)) {
+      res.status(403).json({ code: 403, message: '权限不足' })
+      return
+    }
+    next()
+  }
+}
+
+
+// ===========================================================
+// 文件: backend/src/middleware/errorHandler.ts
+// 说明: 全局错误处理中间件
+// ===========================================================
+
+import { Request, Response, NextFunction } from 'express'
+import { logger } from '../utils/logger'
+
+export function errorHandler(err: any, req: Request, res: Response, _next: NextFunction): void {
+  logger.error(`${req.method} ${req.path} - ${err.message}`, { stack: err.stack })
+
+  const statusCode = err.statusCode || 500
+  res.status(statusCode).json({
+    code: statusCode,
+    message: err.message || '服务器内部错误',
+  })
+}
+
+
+// ===========================================================
+// 文件: backend/src/middleware/rateLimiter.ts
+// 说明: 请求限流中间件
+// ===========================================================
+
+import { Request, Response, NextFunction } from 'express'
+
+const requestCounts = new Map<string, { count: number; resetAt: number }>()
+const MAX_REQUESTS = 1000
+const WINDOW_MS = 60 * 1000
+
+export function rateLimiter(req: Request, res: Response, next: NextFunction): void {
+  const ip = req.ip || 'unknown'
+  const now = Date.now()
+  const record = requestCounts.get(ip)
+
+  if (!record || now > record.resetAt) {
+    requestCounts.set(ip, { count: 1, resetAt: now + WINDOW_MS })
+    return next()
+  }
+
+  record.count++
+  if (record.count > MAX_REQUESTS) {
+    res.status(429).json({ code: 429, message: '请求过于频繁' })
+    return
+  }
+  next()
+}
+
+
+// ===========================================================
+// 文件: backend/src/models/user.model.ts
+// 说明: 用户数据模型
+// ===========================================================
+
+import { getDatabase } from '../config/database'
+import bcrypt from 'bcryptjs'
+import { v4 as uuidv4 } from 'uuid'
+
+export interface User {
+  id: string
+  username: string
+  password_hash: string
+  full_name: string
+  role: string
+  status: string
+  created_at: string
+  updated_at: string
+  last_login_at: string | null
+}
+
+export const UserModel = {
+  findByUsername(username: string): User | undefined {
+    return getDatabase().prepare('SELECT * FROM users WHERE username = ?').get(username) as User | undefined
+  },
+
+  findById(id: string): User | undefined {
+    return getDatabase().prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined
+  },
+
+  findAll(): User[] {
+    return getDatabase().prepare('SELECT id, username, full_name, role, status, created_at, last_login_at FROM users').all() as User[]
+  },
+
+  create(data: { username: string; password: string; full_name: string; role: string }): User {
+    const id = uuidv4()
+    const password_hash = bcrypt.hashSync(data.password, 10)
+    getDatabase().prepare(
+      'INSERT INTO users (id, username, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?)'
+    ).run(id, data.username, password_hash, data.full_name, data.role)
+    return this.findById(id)!
+  },
+
+  updateLastLogin(id: string): void {
+    getDatabase().prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").run(id)
+  },
+
+  async initialize(): Promise<void> {
+    const admin = this.findByUsername('admin')
+    if (admin && admin.password_hash.startsWith('$2a$10$8Kx')) {
+      // Replace placeholder hash with real one
+      const realHash = bcrypt.hashSync('admin123', 10)
+      getDatabase().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(realHash, admin.id)
+    }
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/auth.controller.ts
+// 说明: 认证控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import jwt from 'jsonwebtoken'
+import bcrypt from 'bcryptjs'
+import { UserModel } from '../models/user.model'
+import { AuthRequest } from '../middleware/authenticate'
+
+export const authController = {
+  login(req: Request, res: Response): void {
+    const { username, password } = req.body
+    if (!username || !password) {
+      res.status(400).json({ code: 400, message: '请输入用户名和密码' })
+      return
+    }
+
+    const user = UserModel.findByUsername(username)
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      res.status(401).json({ code: 401, message: '用户名或密码错误' })
+      return
+    }
+
+    if (user.status !== 'active') {
+      res.status(403).json({ code: 403, message: '账号已被禁用' })
+      return
+    }
+
+    const expiresIn = (process.env.JWT_EXPIRES_IN || '7d') as any
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, role: user.role },
+      process.env.JWT_SECRET || 'secret',
+      { expiresIn }
+    )
+
+    UserModel.updateLastLogin(user.id)
+
+    res.json({
+      code: 0,
+      message: '登录成功',
+      data: {
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          fullName: user.full_name,
+          role: user.role,
+        },
+      },
+    })
+  },
+
+  me(req: AuthRequest, res: Response): void {
+    const user = UserModel.findById(req.user!.userId)
+    if (!user) {
+      res.status(404).json({ code: 404, message: '用户不存在' })
+      return
+    }
+    res.json({
+      code: 0,
+      message: 'success',
+      data: {
+        id: user.id,
+        username: user.username,
+        fullName: user.full_name,
+        role: user.role,
+      },
+    })
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/dashboard.controller.ts
+// 说明: 仪表盘控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getQueryApi, BUCKETS } from '../config/influxdb'
+import { getDatabase } from '../config/database'
+import { logger } from '../utils/logger'
+
+export const dashboardController = {
+  async overview(_req: Request, res: Response): Promise<void> {
+    try {
+      const db = getDatabase()
+
+      // Get device summary
+      const devices = db.prepare(`
+        SELECT status, COUNT(*) as count FROM devices GROUP BY status
+      `).all() as any[]
+      const deviceSummary = {
+        total: devices.reduce((sum: number, d: any) => sum + d.count, 0),
+        online: devices.find((d: any) => d.status === 'online')?.count || 0,
+        offline: devices.find((d: any) => d.status === 'offline')?.count || 0,
+        warning: devices.find((d: any) => d.status === 'warning')?.count || 0,
+      }
+
+      // Get alarm summary
+      const alarms = db.prepare(`
+        SELECT severity, COUNT(*) as count FROM alarm_records WHERE status = 'active' GROUP BY severity
+      `).all() as any[]
+      const alarmSummary = {
+        active: alarms.reduce((sum: number, a: any) => sum + a.count, 0),
+        critical: alarms.find((a: any) => a.severity === 'critical')?.count || 0,
+        warning: alarms.find((a: any) => a.severity === 'warning')?.count || 0,
+      }
+
+      // Get current year quota
+      const currentYear = new Date().getFullYear()
+      const quota = db.prepare('SELECT quota_total FROM carbon_quotas WHERE year = ? AND area_id IS NULL').get(currentYear) as any
+
+      // Try to get carbon data from InfluxDB
+      let carbonEmission = { today: 0, thisMonth: 0, thisYear: 0, quota: quota?.quota_total || 0, quotaUsagePct: 0 }
+      try {
+        const queryApi = getQueryApi()
+        const yearQuery = `
+          from(bucket: "${BUCKETS.CARBON_EMISSIONS}")
+            |> range(start: ${currentYear}-01-01T00:00:00Z)
+            |> filter(fn: (r) => r._measurement == "carbon_emission" and r.area_id == "total")
+            |> filter(fn: (r) => r._field == "emission")
+            |> sum()
+        `
+        const rows: any[] = []
+        await new Promise<void>((resolve) => {
+          queryApi.queryRows(yearQuery, {
+            next: (row, tableMeta) => { rows.push(tableMeta.toObject(row)) },
+            error: () => resolve(),
+            complete: () => resolve(),
+          })
+        })
+        if (rows.length > 0) {
+          carbonEmission.thisYear = rows[0]._value || 0
+          carbonEmission.quotaUsagePct = quota ? (carbonEmission.thisYear / quota.quota_total) * 100 : 0
+        }
+      } catch {
+        // InfluxDB may not be available
+      }
+
+      res.json({
+        code: 0,
+        message: 'success',
+        data: { carbonEmission, deviceSummary, alarmSummary },
+      })
+    } catch (error) {
+      logger.error('Dashboard overview error:', error)
+      res.status(500).json({ code: 500, message: '获取总览数据失败' })
+    }
+  },
+
+  async carbonTrend(req: Request, res: Response): Promise<void> {
+    const { period = 'monthly', year = new Date().getFullYear() } = req.query
+    try {
+      const queryApi = getQueryApi()
+      const query = `
+        from(bucket: "${BUCKETS.CARBON_EMISSIONS}")
+          |> range(start: ${year}-01-01T00:00:00Z, stop: ${Number(year) + 1}-01-01T00:00:00Z)
+          |> filter(fn: (r) => r._measurement == "carbon_emission" and r.area_id == "total")
+          |> filter(fn: (r) => r._field == "emission")
+          |> aggregateWindow(every: 1mo, fn: sum, createEmpty: true)
+      `
+      const rows: any[] = []
+      await new Promise<void>((resolve) => {
+        queryApi.queryRows(query, {
+          next: (row, tableMeta) => { rows.push(tableMeta.toObject(row)) },
+          error: () => resolve(),
+          complete: () => resolve(),
+        })
+      })
+
+      const db = getDatabase()
+      const quota = db.prepare('SELECT quota_total FROM carbon_quotas WHERE year = ?').get(Number(year)) as any
+      const monthlyQuota = quota ? quota.quota_total / 12 : 0
+
+      res.json({
+        code: 0,
+        message: 'success',
+        data: {
+          period,
+          months: rows.map(r => r._time),
+          emission: rows.map(r => r._value || 0),
+          quota: rows.map(() => monthlyQuota),
+        },
+      })
+    } catch (error) {
+      logger.error('Carbon trend error:', error)
+      res.json({ code: 0, message: 'success', data: { months: [], emission: [], quota: [] } })
+    }
+  },
+
+  async areaBreakdown(_req: Request, res: Response): Promise<void> {
+    try {
+      const db = getDatabase()
+      const areas = db.prepare('SELECT id, name FROM areas').all() as any[]
+
+      res.json({
+        code: 0,
+        message: 'success',
+        data: areas.map(a => ({
+          areaId: a.id,
+          areaName: a.name,
+          electricity: 0,
+          gas: 0,
+          water: 0,
+          steam: 0,
+          carbonEmission: 0,
+        })),
+      })
+    } catch (error) {
+      logger.error('Area breakdown error:', error)
+      res.status(500).json({ code: 500, message: '获取区域数据失败' })
+    }
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/device.controller.ts
+// 说明: 设备管理控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getDatabase } from '../config/database'
+import { v4 as uuidv4 } from 'uuid'
+
+export const deviceController = {
+  list(req: Request, res: Response): void {
+    const { energyType, areaId, status, page = '1', pageSize = '20' } = req.query
+    const db = getDatabase()
+    let where = 'WHERE 1=1'
+    const params: any[] = []
+
+    if (energyType) { where += ' AND d.energy_type = ?'; params.push(energyType) }
+    if (areaId) { where += ' AND d.area_id = ?'; params.push(areaId) }
+    if (status) { where += ' AND d.status = ?'; params.push(status) }
+
+    const total = db.prepare(`SELECT COUNT(*) as count FROM devices d ${where}`).get(...params) as any
+    const offset = (Number(page) - 1) * Number(pageSize)
+    const rows = db.prepare(`
+      SELECT d.*, a.name as area_name
+      FROM devices d LEFT JOIN areas a ON d.area_id = a.id
+      ${where} ORDER BY d.created_at DESC LIMIT ? OFFSET ?
+    `).all(...params, Number(pageSize), offset)
+
+    res.json({ code: 0, message: 'success', data: rows, total: total.count, page: Number(page), pageSize: Number(pageSize) })
+  },
+
+  getById(req: Request, res: Response): void {
+    const db = getDatabase()
+    const device = db.prepare(`
+      SELECT d.*, a.name as area_name
+      FROM devices d LEFT JOIN areas a ON d.area_id = a.id
+      WHERE d.id = ?
+    `).get(req.params.id)
+
+    if (!device) {
+      res.status(404).json({ code: 404, message: '设备不存在' })
+      return
+    }
+    res.json({ code: 0, message: 'success', data: device })
+  },
+
+  create(req: Request, res: Response): void {
+    const { id, name, energy_type, protocol, area_id, scope, manufacturer, model, serial_number, connection_config } = req.body
+    const db = getDatabase()
+    const deviceId = id || `${energy_type?.charAt(0).toUpperCase()}M-${uuidv4().slice(0, 3).toUpperCase()}`
+
+    db.prepare(`
+      INSERT INTO devices (id, name, energy_type, protocol, area_id, scope, manufacturer, model, serial_number, connection_config)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(deviceId, name, energy_type, protocol, area_id, scope || 'scope2', manufacturer, model, serial_number, JSON.stringify(connection_config))
+
+    res.json({ code: 0, message: '设备创建成功', data: { id: deviceId } })
+  },
+
+  update(req: Request, res: Response): void {
+    const db = getDatabase()
+    const fields = ['name', 'energy_type', 'protocol', 'area_id', 'scope', 'manufacturer', 'model', 'status', 'connection_config']
+    const updates: string[] = []
+    const params: any[] = []
+
+    for (const field of fields) {
+      if (req.body[field] !== undefined) {
+        updates.push(`${field} = ?`)
+        params.push(field === 'connection_config' ? JSON.stringify(req.body[field]) : req.body[field])
+      }
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ code: 400, message: '没有需要更新的字段' })
+      return
+    }
+
+    updates.push("updated_at = datetime('now')")
+    params.push(req.params.id)
+    db.prepare(`UPDATE devices SET ${updates.join(', ')} WHERE id = ?`).run(...params)
+    res.json({ code: 0, message: '设备更新成功' })
+  },
+
+  delete(req: Request, res: Response): void {
+    const db = getDatabase()
+    db.prepare('DELETE FROM devices WHERE id = ?').run(req.params.id)
+    res.json({ code: 0, message: '设备已删除' })
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/data.controller.ts
+// 说明: 能耗数据控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getQueryApi, getWriteApi, BUCKETS } from '../config/influxdb'
+import { Point } from '@influxdata/influxdb-client'
+import { logger } from '../utils/logger'
+
+export const dataController = {
+  async realtime(req: Request, res: Response): Promise<void> {
+    const { energyType, areaId } = req.query
+    try {
+      const queryApi = getQueryApi()
+      let filters = 'r._measurement == "meter_reading"'
+      if (energyType) filters += ` and r.energy_type == "${energyType}"`
+      if (areaId) filters += ` and r.area_id == "${areaId}"`
+
+      const query = `
+        from(bucket: "${BUCKETS.ENERGY_REALTIME}")
+          |> range(start: -5m)
+          |> filter(fn: (r) => ${filters})
+          |> last()
+      `
+      const rows: any[] = []
+      await new Promise<void>((resolve) => {
+        queryApi.queryRows(query, {
+          next: (row, tableMeta) => { rows.push(tableMeta.toObject(row)) },
+          error: () => resolve(),
+          complete: () => resolve(),
+        })
+      })
+
+      // Group by device_id
+      const grouped = new Map<string, any>()
+      for (const row of rows) {
+        const deviceId = row.device_id
+        if (!grouped.has(deviceId)) {
+          grouped.set(deviceId, { deviceId, energyType: row.energy_type, areaId: row.area_id, timestamp: row._time, data: {} })
+        }
+        grouped.get(deviceId)!.data[row._field] = row._value
+      }
+
+      res.json({ code: 0, message: 'success', data: Array.from(grouped.values()) })
+    } catch {
+      res.json({ code: 0, message: 'success', data: [] })
+    }
+  },
+
+  async consumption(req: Request, res: Response): Promise<void> {
+    const { energyType, areaId, period = 'hourly', startDate, endDate } = req.query
+    const bucket = period === 'daily' ? BUCKETS.ENERGY_DAILY : BUCKETS.ENERGY_HOURLY
+    const start = startDate || '-7d'
+    const stop = endDate ? `, stop: ${endDate}` : ''
+
+    try {
+      const queryApi = getQueryApi()
+      let filters = 'r._measurement == "energy_consumption"'
+      if (energyType) filters += ` and r.energy_type == "${energyType}"`
+      if (areaId) filters += ` and r.area_id == "${areaId}"`
+
+      const query = `
+        from(bucket: "${bucket}")
+          |> range(start: ${start}${stop})
+          |> filter(fn: (r) => ${filters})
+          |> filter(fn: (r) => r._field == "consumption")
+      `
+      const rows: any[] = []
+      await new Promise<void>((resolve) => {
+        queryApi.queryRows(query, {
+          next: (row, tableMeta) => { rows.push(tableMeta.toObject(row)) },
+          error: () => resolve(),
+          complete: () => resolve(),
+        })
+      })
+
+      res.json({
+        code: 0,
+        message: 'success',
+        data: { timestamps: rows.map(r => r._time), values: rows.map(r => r._value) },
+      })
+    } catch {
+      res.json({ code: 0, message: 'success', data: { timestamps: [], values: [] } })
+    }
+  },
+
+  async manualInput(req: Request, res: Response): Promise<void> {
+    const { deviceId, energyType, timestamp, readings } = req.body
+    if (!deviceId || !energyType || !readings) {
+      res.status(400).json({ code: 400, message: '缺少必要参数' })
+      return
+    }
+
+    try {
+      const writeApi = getWriteApi(BUCKETS.ENERGY_REALTIME)
+      const point = new Point('meter_reading')
+        .tag('device_id', deviceId)
+        .tag('energy_type', energyType)
+        .tag('protocol', 'manual')
+        .timestamp(timestamp ? new Date(timestamp) : new Date())
+
+      for (const [key, value] of Object.entries(readings)) {
+        point.floatField(key, Number(value))
+      }
+
+      writeApi.writePoint(point)
+      await writeApi.flush()
+
+      res.json({ code: 0, message: '数据录入成功' })
+    } catch (error) {
+      logger.error('Manual input error:', error)
+      res.status(500).json({ code: 500, message: '数据录入失败' })
+    }
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/carbon.controller.ts
+// 说明: 碳排放控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getQueryApi, BUCKETS } from '../config/influxdb'
+import { getDatabase } from '../config/database'
+import { logger } from '../utils/logger'
+
+export const carbonController = {
+  async summary(req: Request, res: Response): Promise<void> {
+    try {
+      const db = getDatabase()
+      const currentYear = new Date().getFullYear()
+      const quota = db.prepare('SELECT quota_total FROM carbon_quotas WHERE year = ? AND area_id IS NULL').get(currentYear) as any
+
+      // Get emission factors for scope breakdown
+      const factors = db.prepare('SELECT energy_type, scope FROM emission_factors WHERE is_default = 1').all() as any[]
+
+      const scopeBreakdown = [
+        { scope: 'scope1', label: '直接排放(范围一)', emission: 0, percentage: 0 },
+        { scope: 'scope2', label: '间接排放(范围二)', emission: 0, percentage: 0 },
+        { scope: 'scope3', label: '其他间接排放(范围三)', emission: 0, percentage: 0 },
+      ]
+
+      const energyBreakdown = [
+        { energyType: 'electricity', label: '电力', emission: 0, percentage: 0 },
+        { energyType: 'gas', label: '天然气', emission: 0, percentage: 0 },
+        { energyType: 'steam', label: '蒸汽', emission: 0, percentage: 0 },
+        { energyType: 'water', label: '自来水', emission: 0, percentage: 0 },
+      ]
+
+      res.json({
+        code: 0,
+        message: 'success',
+        data: {
+          totalEmission: 0,
+          quota: quota?.quota_total || 0,
+          quotaUsage: 0,
+          scopeBreakdown,
+          energyBreakdown,
+        },
+      })
+    } catch (error) {
+      logger.error('Carbon summary error:', error)
+      res.status(500).json({ code: 500, message: '获取碳排放汇总失败' })
+    }
+  },
+
+  async trend(req: Request, res: Response): Promise<void> {
+    const { period = 'monthly', year = new Date().getFullYear(), areaId } = req.query
+    try {
+      const queryApi = getQueryApi()
+      const areaFilter = areaId ? `and r.area_id == "${areaId}"` : 'and r.area_id == "total"'
+      const query = `
+        from(bucket: "${BUCKETS.CARBON_EMISSIONS}")
+          |> range(start: ${year}-01-01T00:00:00Z, stop: ${Number(year) + 1}-01-01T00:00:00Z)
+          |> filter(fn: (r) => r._measurement == "carbon_emission" ${areaFilter})
+          |> filter(fn: (r) => r._field == "emission")
+          |> aggregateWindow(every: 1mo, fn: sum, createEmpty: true)
+      `
+      const rows: any[] = []
+      await new Promise<void>((resolve) => {
+        queryApi.queryRows(query, {
+          next: (row, tableMeta) => { rows.push(tableMeta.toObject(row)) },
+          error: () => resolve(),
+          complete: () => resolve(),
+        })
+      })
+
+      res.json({
+        code: 0,
+        message: 'success',
+        data: { timestamps: rows.map(r => r._time), values: rows.map(r => r._value || 0) },
+      })
+    } catch {
+      res.json({ code: 0, message: 'success', data: { timestamps: [], values: [] } })
+    }
+  },
+
+  async quotaStatus(req: Request, res: Response): Promise<void> {
+    const year = Number(req.query.year) || new Date().getFullYear()
+    const db = getDatabase()
+    const quota = db.prepare('SELECT * FROM carbon_quotas WHERE year = ? AND area_id IS NULL').get(year) as any
+
+    res.json({
+      code: 0,
+      message: 'success',
+      data: {
+        year,
+        annualQuota: quota?.quota_total || 0,
+        used: 0,
+        remaining: quota?.quota_total || 0,
+        monthlyQuota: quota ? quota.quota_total / 12 : 0,
+      },
+    })
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/alarm.controller.ts
+// 说明: 告警管理控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getDatabase } from '../config/database'
+import { AuthRequest } from '../middleware/authenticate'
+
+export const alarmController = {
+  list(req: Request, res: Response): void {
+    const { status, severity, category, page = '1', pageSize = '20' } = req.query
+    const db = getDatabase()
+    let where = 'WHERE 1=1'
+    const params: any[] = []
+
+    if (status) { where += ' AND ar.status = ?'; params.push(status) }
+    if (severity) { where += ' AND ar.severity = ?'; params.push(severity) }
+    if (category) { where += ' AND rl.category = ?'; params.push(category) }
+
+    const total = db.prepare(`
+      SELECT COUNT(*) as count FROM alarm_records ar
+      LEFT JOIN alarm_rules rl ON ar.rule_id = rl.id ${where}
+    `).get(...params) as any
+
+    const offset = (Number(page) - 1) * Number(pageSize)
+    const rows = db.prepare(`
+      SELECT ar.*, rl.name as rule_name, rl.category
+      FROM alarm_records ar LEFT JOIN alarm_rules rl ON ar.rule_id = rl.id
+      ${where} ORDER BY ar.created_at DESC LIMIT ? OFFSET ?
+    `).all(...params, Number(pageSize), offset)
+
+    res.json({ code: 0, message: 'success', data: rows, total: total.count, page: Number(page), pageSize: Number(pageSize) })
+  },
+
+  stats(_req: Request, res: Response): void {
+    const db = getDatabase()
+    const stats = db.prepare(`
+      SELECT status, severity, COUNT(*) as count FROM alarm_records GROUP BY status, severity
+    `).all()
+    res.json({ code: 0, message: 'success', data: stats })
+  },
+
+  acknowledge(req: AuthRequest, res: Response): void {
+    const db = getDatabase()
+    db.prepare(`
+      UPDATE alarm_records SET status = 'acknowledged', acknowledged_at = datetime('now'), acknowledged_by = ?, note = ?
+      WHERE id = ?
+    `).run(req.user?.username, req.body.note || '', req.params.id)
+    res.json({ code: 0, message: '告警已确认' })
+  },
+
+  resolve(req: AuthRequest, res: Response): void {
+    const db = getDatabase()
+    db.prepare(`
+      UPDATE alarm_records SET status = 'resolved', resolved_at = datetime('now'), resolved_by = ?, note = ?
+      WHERE id = ?
+    `).run(req.user?.username, req.body.note || '', req.params.id)
+    res.json({ code: 0, message: '告警已解除' })
+  },
+
+  // Alarm Rules
+  listRules(_req: Request, res: Response): void {
+    const db = getDatabase()
+    const rules = db.prepare('SELECT * FROM alarm_rules ORDER BY created_at DESC').all()
+    res.json({ code: 0, message: 'success', data: rules })
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/emissionFactor.controller.ts
+// 说明: 排放因子控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getDatabase } from '../config/database'
+import { v4 as uuidv4 } from 'uuid'
+
+export const emissionFactorController = {
+  list(req: Request, res: Response): void {
+    const { energyType, status = 'active' } = req.query
+    const db = getDatabase()
+    let where = 'WHERE status = ?'
+    const params: any[] = [status]
+
+    if (energyType) { where += ' AND energy_type = ?'; params.push(energyType) }
+
+    const rows = db.prepare(`SELECT * FROM emission_factors ${where} ORDER BY energy_type, is_default DESC`).all(...params)
+    res.json({ code: 0, message: 'success', data: rows })
+  },
+
+  create(req: Request, res: Response): void {
+    const { energy_type, name, factor_value, factor_unit, source_unit, scope, region, source, valid_year, is_default } = req.body
+    const db = getDatabase()
+    const id = uuidv4()
+
+    if (is_default) {
+      db.prepare('UPDATE emission_factors SET is_default = 0 WHERE energy_type = ?').run(energy_type)
+    }
+
+    db.prepare(`
+      INSERT INTO emission_factors (id, energy_type, name, factor_value, factor_unit, source_unit, scope, region, source, valid_year, is_default)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, energy_type, name, factor_value, factor_unit, source_unit, scope, region, source, valid_year, is_default ? 1 : 0)
+
+    res.json({ code: 0, message: '排放因子创建成功', data: { id } })
+  },
+
+  update(req: Request, res: Response): void {
+    const db = getDatabase()
+    const { name, factor_value, is_default, status } = req.body
+    const updates: string[] = []
+    const params: any[] = []
+
+    if (name) { updates.push('name = ?'); params.push(name) }
+    if (factor_value) { updates.push('factor_value = ?'); params.push(factor_value) }
+    if (status) { updates.push('status = ?'); params.push(status) }
+    if (is_default !== undefined) {
+      updates.push('is_default = ?'); params.push(is_default ? 1 : 0)
+      if (is_default) {
+        const existing = db.prepare('SELECT energy_type FROM emission_factors WHERE id = ?').get(req.params.id) as any
+        if (existing) {
+          db.prepare('UPDATE emission_factors SET is_default = 0 WHERE energy_type = ? AND id != ?').run(existing.energy_type, req.params.id)
+        }
+      }
+    }
+
+    if (updates.length > 0) {
+      updates.push("updated_at = datetime('now')")
+      params.push(req.params.id)
+      db.prepare(`UPDATE emission_factors SET ${updates.join(', ')} WHERE id = ?`).run(...params)
+    }
+
+    res.json({ code: 0, message: '排放因子更新成功' })
+  },
+
+  delete(req: Request, res: Response): void {
+    getDatabase().prepare('DELETE FROM emission_factors WHERE id = ?').run(req.params.id)
+    res.json({ code: 0, message: '排放因子已删除' })
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/controllers/system.controller.ts
+// 说明: 系统管理控制器
+// ===========================================================
+
+import { Request, Response } from 'express'
+import { getDatabase } from '../config/database'
+import { v4 as uuidv4 } from 'uuid'
+
+export const systemController = {
+  // Areas
+  listAreas(_req: Request, res: Response): void {
+    const db = getDatabase()
+    const areas = db.prepare('SELECT * FROM areas ORDER BY sort_order').all()
+    res.json({ code: 0, message: 'success', data: areas })
+  },
+
+  createArea(req: Request, res: Response): void {
+    const { id, name, parent_id, type, description, sort_order } = req.body
+    const db = getDatabase()
+    const areaId = id || `area-${uuidv4().slice(0, 8)}`
+    db.prepare('INSERT INTO areas (id, name, parent_id, type, description, sort_order) VALUES (?, ?, ?, ?, ?, ?)').run(areaId, name, parent_id, type || 'production', description, sort_order || 0)
+    res.json({ code: 0, message: '区域创建成功', data: { id: areaId } })
+  },
+
+  updateArea(req: Request, res: Response): void {
+    const { name, type, description, sort_order } = req.body
+    const db = getDatabase()
+    db.prepare('UPDATE areas SET name = COALESCE(?, name), type = COALESCE(?, type), description = COALESCE(?, description), sort_order = COALESCE(?, sort_order) WHERE id = ?')
+      .run(name, type, description, sort_order, req.params.id)
+    res.json({ code: 0, message: '区域更新成功' })
+  },
+
+  deleteArea(req: Request, res: Response): void {
+    getDatabase().prepare('DELETE FROM areas WHERE id = ?').run(req.params.id)
+    res.json({ code: 0, message: '区域已删除' })
+  },
+
+  // Config
+  getConfig(_req: Request, res: Response): void {
+    const db = getDatabase()
+    const configs = db.prepare('SELECT * FROM system_config').all() as any[]
+    const configMap: Record<string, string> = {}
+    configs.forEach(c => { configMap[c.key] = c.value })
+    res.json({ code: 0, message: 'success', data: configMap })
+  },
+
+  updateConfig(req: Request, res: Response): void {
+    const db = getDatabase()
+    const upsert = db.prepare("INSERT INTO system_config (key, value, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
+    for (const [key, value] of Object.entries(req.body)) {
+      upsert.run(key, String(value))
+    }
+    res.json({ code: 0, message: '配置更新成功' })
+  },
+
+  // Energy Prices
+  getEnergyPrices(_req: Request, res: Response): void {
+    const db = getDatabase()
+    const prices = db.prepare('SELECT * FROM energy_prices ORDER BY energy_type').all()
+    res.json({ code: 0, message: 'success', data: prices })
+  },
+}
+
+
+// ===========================================================
+// 文件: backend/src/routes/index.ts
+// 说明: 路由聚合入口
+// ===========================================================
+
+import { Router } from 'express'
+import authRoutes from './auth.routes'
+import dashboardRoutes from './dashboard.routes'
+import deviceRoutes from './device.routes'
+import dataRoutes from './data.routes'
+import carbonRoutes from './carbon.routes'
+import alarmRoutes from './alarm.routes'
+import emissionFactorRoutes from './emissionFactor.routes'
+import systemRoutes from './system.routes'
+
+const router = Router()
+
+router.use('/auth', authRoutes)
+router.use('/dashboard', dashboardRoutes)
+router.use('/devices', deviceRoutes)
+router.use('/data', dataRoutes)
+router.use('/carbon', carbonRoutes)
+router.use('/alarms', alarmRoutes)
+router.use('/emission-factors', emissionFactorRoutes)
+router.use('/system', systemRoutes)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/auth.routes.ts
+// 说明: 认证路由
+// ===========================================================
+
+import { Router } from 'express'
+import { authController } from '../controllers/auth.controller'
+import { authenticate } from '../middleware/authenticate'
+
+const router = Router()
+
+router.post('/login', authController.login)
+router.get('/me', authenticate, authController.me)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/dashboard.routes.ts
+// 说明: 仪表盘路由
+// ===========================================================
+
+import { Router } from 'express'
+import { dashboardController } from '../controllers/dashboard.controller'
+import { authenticate } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/overview', authenticate, dashboardController.overview)
+router.get('/carbon-trend', authenticate, dashboardController.carbonTrend)
+router.get('/area-breakdown', authenticate, dashboardController.areaBreakdown)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/device.routes.ts
+// 说明: 设备路由
+// ===========================================================
+
+import { Router } from 'express'
+import { deviceController } from '../controllers/device.controller'
+import { authenticate, authorize } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/', authenticate, deviceController.list)
+router.get('/:id', authenticate, deviceController.getById)
+router.post('/', authenticate, authorize('super_admin', 'admin'), deviceController.create)
+router.put('/:id', authenticate, authorize('super_admin', 'admin'), deviceController.update)
+router.delete('/:id', authenticate, authorize('super_admin', 'admin'), deviceController.delete)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/data.routes.ts
+// 说明: 数据路由
+// ===========================================================
+
+import { Router } from 'express'
+import { dataController } from '../controllers/data.controller'
+import { authenticate } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/realtime', authenticate, dataController.realtime)
+router.get('/consumption', authenticate, dataController.consumption)
+router.post('/manual-input', authenticate, dataController.manualInput)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/carbon.routes.ts
+// 说明: 碳排放路由
+// ===========================================================
+
+import { Router } from 'express'
+import { carbonController } from '../controllers/carbon.controller'
+import { authenticate } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/summary', authenticate, carbonController.summary)
+router.get('/trend', authenticate, carbonController.trend)
+router.get('/quota-status', authenticate, carbonController.quotaStatus)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/alarm.routes.ts
+// 说明: 告警路由
+// ===========================================================
+
+import { Router } from 'express'
+import { alarmController } from '../controllers/alarm.controller'
+import { authenticate } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/', authenticate, alarmController.list)
+router.get('/stats', authenticate, alarmController.stats)
+router.put('/:id/acknowledge', authenticate, alarmController.acknowledge)
+router.put('/:id/resolve', authenticate, alarmController.resolve)
+router.get('/rules', authenticate, alarmController.listRules)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/emissionFactor.routes.ts
+// 说明: 排放因子路由
+// ===========================================================
+
+import { Router } from 'express'
+import { emissionFactorController } from '../controllers/emissionFactor.controller'
+import { authenticate, authorize } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/', authenticate, emissionFactorController.list)
+router.post('/', authenticate, authorize('super_admin', 'admin'), emissionFactorController.create)
+router.put('/:id', authenticate, authorize('super_admin', 'admin'), emissionFactorController.update)
+router.delete('/:id', authenticate, authorize('super_admin', 'admin'), emissionFactorController.delete)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/routes/system.routes.ts
+// 说明: 系统管理路由
+// ===========================================================
+
+import { Router } from 'express'
+import { systemController } from '../controllers/system.controller'
+import { authenticate, authorize } from '../middleware/authenticate'
+
+const router = Router()
+
+router.get('/areas', authenticate, systemController.listAreas)
+router.post('/areas', authenticate, authorize('super_admin', 'admin'), systemController.createArea)
+router.put('/areas/:id', authenticate, authorize('super_admin', 'admin'), systemController.updateArea)
+router.delete('/areas/:id', authenticate, authorize('super_admin', 'admin'), systemController.deleteArea)
+router.get('/config', authenticate, systemController.getConfig)
+router.put('/config', authenticate, authorize('super_admin', 'admin'), systemController.updateConfig)
+router.get('/energy-prices', authenticate, systemController.getEnergyPrices)
+
+export default router
+
+
+// ===========================================================
+// 文件: backend/src/services/dataSimulator.service.ts
+// 说明: 数据模拟器服务
+// ===========================================================
+
+import { Point } from '@influxdata/influxdb-client'
+import { getWriteApi, BUCKETS } from '../config/influxdb'
+import { getDatabase } from '../config/database'
+import { emitEnergyData, emitDeviceStatus } from '../config/socketio'
+import { logger } from '../utils/logger'
+
+interface DeviceConfig {
+  id: string
+  energy_type: string
+  area_id: string
+  scope: string
+}
+
+// Base values for each device
+const deviceBaseValues: Record<string, Record<string, number>> = {
+  'EM-001': { voltage: 380, current: 120, active_power: 78, total_energy: 150000 },
+  'EM-002': { voltage: 380, current: 95, active_power: 62, total_energy: 120000 },
+  'EM-003': { voltage: 220, current: 35, active_power: 13, total_energy: 45000 },
+  'GM-001': { flow_rate: 15, pressure: 0.35, temperature: 22, total_volume: 50000 },
+  'GM-002': { flow_rate: 25, pressure: 0.40, temperature: 20, total_volume: 80000 },
+  'WM-001': { flow_rate: 8, pressure: 0.30, total_volume: 95000 },
+  'SM-001': { flow_rate: 5, pressure: 0.80, temperature: 175, total_mass: 3000 },
+}
+
+function generateReading(baseValue: number, variation: number): number {
+  return baseValue + (Math.random() - 0.5) * 2 * baseValue * variation
+}
+
+function generateElectricityPoint(device: DeviceConfig): Point {
+  const base = deviceBaseValues[device.id] || { voltage: 380, current: 100, active_power: 65, total_energy: 100000 }
+  const point = new Point('meter_reading')
+    .tag('device_id', device.id)
+    .tag('energy_type', 'electricity')
+    .tag('area_id', device.area_id)
+    .tag('protocol', 'mqtt')
+    .floatField('voltage', generateReading(base.voltage, 0.02))
+    .floatField('current', generateReading(base.current, 0.15))
+    .floatField('active_power', generateReading(base.active_power, 0.15))
+    .floatField('reactive_power', generateReading(base.active_power * 0.15, 0.2))
+    .floatField('power_factor', generateReading(0.92, 0.03))
+    .floatField('frequency', generateReading(50.0, 0.002))
+    .floatField('total_energy', base.total_energy + Math.random() * 0.5)
+
+  // Increment total energy
+  base.total_energy += Math.random() * 0.5
+  return point
+}
+
+function generateGasPoint(device: DeviceConfig): Point {
+  const base = deviceBaseValues[device.id] || { flow_rate: 15, pressure: 0.35, temperature: 22, total_volume: 50000 }
+  const point = new Point('meter_reading')
+    .tag('device_id', device.id)
+    .tag('energy_type', 'gas')
+    .tag('area_id', device.area_id)
+    .tag('protocol', 'mqtt')
+    .floatField('flow_rate', generateReading(base.flow_rate, 0.1))
+    .floatField('pressure', generateReading(base.pressure, 0.05))
+    .floatField('temperature', generateReading(base.temperature, 0.05))
+    .floatField('total_volume', base.total_volume + Math.random() * 0.01)
+
+  base.total_volume += Math.random() * 0.01
+  return point
+}
+
+function generateWaterPoint(device: DeviceConfig): Point {
+  const base = deviceBaseValues[device.id] || { flow_rate: 8, pressure: 0.30, total_volume: 95000 }
+  const point = new Point('meter_reading')
+    .tag('device_id', device.id)
+    .tag('energy_type', 'water')
+    .tag('area_id', device.area_id)
+    .tag('protocol', 'mqtt')
+    .floatField('flow_rate', generateReading(base.flow_rate, 0.12))
+    .floatField('pressure', generateReading(base.pressure, 0.05))
+    .floatField('total_volume', base.total_volume + Math.random() * 0.005)
+
+  base.total_volume += Math.random() * 0.005
+  return point
+}
+
+function generateSteamPoint(device: DeviceConfig): Point {
+  const base = deviceBaseValues[device.id] || { flow_rate: 5, pressure: 0.80, temperature: 175, total_mass: 3000 }
+  const point = new Point('meter_reading')
+    .tag('device_id', device.id)
+    .tag('energy_type', 'steam')
+    .tag('area_id', device.area_id)
+    .tag('protocol', 'mqtt')
+    .floatField('flow_rate', generateReading(base.flow_rate, 0.1))
+    .floatField('pressure', generateReading(base.pressure, 0.05))
+    .floatField('temperature', generateReading(base.temperature, 0.03))
+    .floatField('total_mass', base.total_mass + Math.random() * 0.01)
+
+  base.total_mass += Math.random() * 0.01
+  return point
+}
+
+let simulatorInterval: ReturnType<typeof setInterval> | null = null
+
+export function startDataSimulator(): void {
+  const db = getDatabase()
+  const config = db.prepare("SELECT value FROM system_config WHERE key = 'data_simulator_enabled'").get() as any
+  if (config?.value !== 'true') {
+    logger.info('Data simulator is disabled')
+    return
+  }
+
+  const devices = db.prepare("SELECT id, energy_type, area_id, scope FROM devices WHERE status = 'online'").all() as DeviceConfig[]
+
+  if (devices.length === 0) {
+    logger.warn('No online devices found for simulation')
+    return
+  }
+
+  logger.info(`Data simulator started — ${devices.length} devices`)
+
+  simulatorInterval = setInterval(async () => {
+    try {
+      const writeApi = getWriteApi(BUCKETS.ENERGY_REALTIME)
+
+      for (const device of devices) {
+        let point: Point
+        switch (device.energy_type) {
+          case 'electricity': point = generateElectricityPoint(device); break
+          case 'gas': point = generateGasPoint(device); break
+          case 'water': point = generateWaterPoint(device); break
+          case 'steam': point = generateSteamPoint(device); break
+          default: continue
+        }
+
+        writeApi.writePoint(point)
+
+        // Emit via Socket.IO
+        const base = deviceBaseValues[device.id]
+        if (base) {
+          emitEnergyData({
+            deviceId: device.id,
+            energyType: device.energy_type,
+            areaId: device.area_id,
+            timestamp: new Date().toISOString(),
+            data: { ...base },
+          })
+        }
+      }
+
+      await writeApi.flush()
+
+      // Emit device statuses
+      emitDeviceStatus(devices.map(d => ({ deviceId: d.id, status: 'online', lastSeen: new Date().toISOString() })))
+    } catch (error) {
+      logger.debug('Simulator write error (InfluxDB may be unavailable):', error)
+    }
+  }, 10000) // Every 10 seconds
+}
+
+export function stopDataSimulator(): void {
+  if (simulatorInterval) {
+    clearInterval(simulatorInterval)
+    simulatorInterval = null
+    logger.info('Data simulator stopped')
+  }
+}
+
+
+// ===========================================================
+// 文件: backend/src/services/scheduler.service.ts
+// 说明: 定时任务调度服务
+// ===========================================================
+
+import cron from 'node-cron'
+import { getQueryApi, getWriteApi, BUCKETS } from '../config/influxdb'
+import { getDatabase } from '../config/database'
+import { Point } from '@influxdata/influxdb-client'
+import { emitCarbonUpdate } from '../config/socketio'
+import { logger } from '../utils/logger'
+
+export function startScheduler(): void {
+  // Every hour: aggregate energy data and calculate carbon
+  cron.schedule('0 * * * *', async () => {
+    logger.info('Running hourly carbon calculation...')
+    await calculateHourlyCarbon()
+  })
+
+  // Daily at 00:05: daily aggregation
+  cron.schedule('5 0 * * *', async () => {
+    logger.info('Running daily aggregation...')
+    await calculateDailyAggregation()
+  })
+
+  logger.info('Scheduler started — hourly carbon calc, daily aggregation')
+}
+
+async function calculateHourlyCarbon(): Promise<void> {
+  try {
+    const db = getDatabase()
+    const queryApi = getQueryApi()
+    const writeApi = getWriteApi(BUCKETS.CARBON_EMISSIONS)
+
+    // Get default emission factors
+    const factors = db.prepare('SELECT * FROM emission_factors WHERE is_default = 1 AND status = ?').all('active') as any[]
+    const factorMap = new Map<string, any>()
+    factors.forEach(f => factorMap.set(f.energy_type, f))
+
+    // Query last hour's energy consumption by area and energy type
+    const query = `
+      from(bucket: "${BUCKETS.ENERGY_REALTIME}")
+        |> range(start: -1h)
+        |> filter(fn: (r) => r._measurement == "meter_reading")
+        |> filter(fn: (r) => r._field == "total_energy" or r._field == "total_volume" or r._field == "total_mass")
+        |> first()
+    `
+    const firstRows: any[] = []
+    await new Promise<void>((resolve) => {
+      queryApi.queryRows(query, {
+        next: (row, tableMeta) => { firstRows.push(tableMeta.toObject(row)) },
+        error: () => resolve(),
+        complete: () => resolve(),
+      })
+    })
+
+    const lastQuery = query.replace('first()', 'last()')
+    const lastRows: any[] = []
+    await new Promise<void>((resolve) => {
+      queryApi.queryRows(lastQuery, {
+        next: (row, tableMeta) => { lastRows.push(tableMeta.toObject(row)) },
+        error: () => resolve(),
+        complete: () => resolve(),
+      })
+    })
+
+    // Calculate deltas and emissions
+    let totalEmission = 0
+    const firstMap = new Map(firstRows.map(r => [`${r.device_id}:${r._field}`, r._value]))
+
+    for (const lastRow of lastRows) {
+      const key = `${lastRow.device_id}:${lastRow._field}`
+      const firstValue = firstMap.get(key)
+      if (firstValue === undefined) continue
+
+      const consumption = lastRow._value - firstValue
+      if (consumption <= 0) continue
+
+      const factor = factorMap.get(lastRow.energy_type)
+      if (!factor) continue
+
+      const emission = consumption * factor.factor_value
+
+      const point = new Point('carbon_emission')
+        .tag('area_id', lastRow.area_id || 'unknown')
+        .tag('energy_type', lastRow.energy_type)
+        .tag('scope', factor.scope)
+        .floatField('emission', emission)
+        .floatField('consumption', consumption)
+        .floatField('emission_factor', factor.factor_value)
+
+      writeApi.writePoint(point)
+      totalEmission += emission
+    }
+
+    // Write total emission
+    if (totalEmission > 0) {
+      const totalPoint = new Point('carbon_emission')
+        .tag('area_id', 'total')
+        .tag('energy_type', 'all')
+        .tag('scope', 'total')
+        .floatField('emission', totalEmission)
+
+      writeApi.writePoint(totalPoint)
+      await writeApi.flush()
+
+      emitCarbonUpdate({ totalEmission, timestamp: new Date().toISOString() })
+      logger.info(`Hourly carbon calc complete: ${totalEmission.toFixed(4)} tCO2e`)
+    }
+  } catch (error) {
+    logger.error('Hourly carbon calculation error:', error)
+  }
+}
+
+async function calculateDailyAggregation(): Promise<void> {
+  try {
+    logger.info('Daily aggregation completed')
+  } catch (error) {
+    logger.error('Daily aggregation error:', error)
+  }
+}
+
+
+// ===========================================================
+// 文件: backend/src/utils/logger.ts
+// 说明: 日志工具
+// ===========================================================
+
+import winston from 'winston'
+
+export const logger = winston.createLogger({
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  format: winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'carbon-system' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(({ timestamp, level, message, ...meta }) => {
+          const metaStr = Object.keys(meta).length > 1 ? ` ${JSON.stringify(meta)}` : ''
+          return `${timestamp} [${level}]: ${message}${metaStr}`
+        })
+      ),
+    }),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' }),
+  ],
+})
+
+
+// ===========================================================
+// 文件: backend/src/db/schema.sql
+// 说明: 数据库表结构定义
+// ===========================================================
+
+-- 双碳数据采集系统 SQLite Schema
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'viewer',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS areas (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    parent_id TEXT,
+    type TEXT NOT NULL DEFAULT 'production',
+    description TEXT,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (parent_id) REFERENCES areas(id)
+);
+
+CREATE TABLE IF NOT EXISTS devices (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    energy_type TEXT NOT NULL,
+    device_type TEXT NOT NULL DEFAULT 'meter',
+    protocol TEXT NOT NULL,
+    area_id TEXT NOT NULL,
+    manufacturer TEXT,
+    model TEXT,
+    serial_number TEXT,
+    install_date TEXT,
+    connection_config TEXT,
+    data_mapping TEXT,
+    rated_capacity REAL,
+    ct_ratio TEXT,
+    multiplier REAL DEFAULT 1.0,
+    scope TEXT DEFAULT 'scope2',
+    status TEXT NOT NULL DEFAULT 'offline',
+    last_seen_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (area_id) REFERENCES areas(id)
+);
+
+CREATE TABLE IF NOT EXISTS emission_factors (
+    id TEXT PRIMARY KEY,
+    energy_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    factor_value REAL NOT NULL,
+    factor_unit TEXT NOT NULL,
+    source_unit TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    region TEXT,
+    source TEXT,
+    valid_year INTEGER,
+    is_default INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS carbon_quotas (
+    id TEXT PRIMARY KEY,
+    year INTEGER NOT NULL,
+    area_id TEXT,
+    quota_total REAL NOT NULL,
+    quota_monthly TEXT,
+    source TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (area_id) REFERENCES areas(id)
+);
+
+CREATE TABLE IF NOT EXISTS alarm_rules (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT,
+    condition_type TEXT NOT NULL,
+    condition_params TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'warning',
+    notification_channels TEXT DEFAULT '["in_app"]',
+    cooldown_minutes INTEGER DEFAULT 60,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS alarm_records (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT NOT NULL,
+    device_id TEXT,
+    area_id TEXT,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    current_value REAL,
+    threshold_value REAL,
+    status TEXT NOT NULL DEFAULT 'active',
+    acknowledged_at TEXT,
+    acknowledged_by TEXT,
+    resolved_at TEXT,
+    resolved_by TEXT,
+    note TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (rule_id) REFERENCES alarm_rules(id)
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    type TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    period_end TEXT NOT NULL,
+    scope TEXT,
+    area_id TEXT,
+    status TEXT DEFAULT 'generating',
+    file_path TEXT,
+    file_format TEXT,
+    file_size INTEGER,
+    generated_by TEXT,
+    generated_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS energy_prices (
+    id TEXT PRIMARY KEY,
+    energy_type TEXT NOT NULL,
+    price_type TEXT NOT NULL,
+    price_value REAL,
+    tou_config TEXT,
+    unit TEXT NOT NULL,
+    valid_from TEXT NOT NULL,
+    valid_until TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS system_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    description TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    action TEXT NOT NULL,
+    resource_type TEXT,
+    resource_id TEXT,
+    details TEXT,
+    ip_address TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_devices_area ON devices(area_id);
+CREATE INDEX IF NOT EXISTS idx_devices_energy_type ON devices(energy_type);
+CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);
+CREATE INDEX IF NOT EXISTS idx_emission_factors_type ON emission_factors(energy_type, is_default);
+CREATE INDEX IF NOT EXISTS idx_alarm_records_status ON alarm_records(status);
+CREATE INDEX IF NOT EXISTS idx_alarm_records_created ON alarm_records(created_at);
+CREATE INDEX IF NOT EXISTS idx_reports_type ON reports(type, created_at);
+
+
+// ===========================================================
+// 文件: backend/src/db/seed.sql
+// 说明: 初始数据种子
+// ===========================================================
+
+-- 默认管理员用户 (密码: admin123)
+INSERT INTO users (id, username, password_hash, full_name, role) VALUES
+('u-001', 'admin', '$2a$10$8KxX7AiCQpH9YW5G5E5cZOQe5Zz5W5W5W5W5W5W5W5W5W5W5W5', '系统管理员', 'super_admin');
+
+-- 默认区域
+INSERT INTO areas (id, name, type, sort_order) VALUES
+('area-workshop-a', '生产车间A', 'production', 1),
+('area-workshop-b', '生产车间B', 'production', 2),
+('area-office', '办公楼', 'office', 3),
+('area-warehouse', '仓库', 'warehouse', 4),
+('area-power', '动力中心', 'utility', 5);
+
+-- 默认排放因子 (2023年度)
+INSERT INTO emission_factors (id, energy_type, name, factor_value, factor_unit, source_unit, scope, region, source, valid_year, is_default, status) VALUES
+('ef-elec-east', 'electricity', '华东电网排放因子', 0.0005810, 'tCO2e/kWh', 'kWh', 'scope2', '华东电网', '生态环境部2023年度', 2023, 1, 'active'),
+('ef-elec-national', 'electricity', '全国电网平均排放因子', 0.0005703, 'tCO2e/kWh', 'kWh', 'scope2', '全国', '生态环境部2023年度', 2023, 0, 'active'),
+('ef-gas-default', 'gas', '天然气排放因子', 0.002162, 'tCO2e/m3', 'm3', 'scope1', '全国', 'IPCC 2006', 2023, 1, 'active'),
+('ef-steam-default', 'steam', '蒸汽排放因子', 0.110, 'tCO2e/t', 't', 'scope2', '全国', '行业标准', 2023, 1, 'active'),
+('ef-water-default', 'water', '自来水排放因子', 0.000091, 'tCO2e/m3', 'm3', 'scope3', '全国', '行业标准', 2023, 1, 'active');
+
+-- 默认设备 (模拟仪表)
+INSERT INTO devices (id, name, energy_type, protocol, area_id, scope, status) VALUES
+('EM-001', '1#车间总电表', 'electricity', 'mqtt', 'area-workshop-a', 'scope2', 'online'),
+('EM-002', '2#车间总电表', 'electricity', 'mqtt', 'area-workshop-b', 'scope2', 'online'),
+('EM-003', '办公楼电表', 'electricity', 'mqtt', 'area-office', 'scope2', 'online'),
+('GM-001', '1#车间燃气表', 'gas', 'mqtt', 'area-workshop-a', 'scope1', 'online'),
+('GM-002', '动力中心燃气表', 'gas', 'mqtt', 'area-power', 'scope1', 'online'),
+('WM-001', '总水表', 'water', 'mqtt', 'area-workshop-a', 'scope3', 'online'),
+('SM-001', '动力中心蒸汽表', 'steam', 'mqtt', 'area-power', 'scope2', 'online');
+
+-- 默认碳配额 (2024年度)
+INSERT INTO carbon_quotas (id, year, quota_total, source) VALUES
+('quota-2024', 2024, 5000.0, '2024年度碳配额分配方案'),
+('quota-2025', 2025, 4800.0, '2025年度碳配额分配方案'),
+('quota-2026', 2026, 4500.0, '2026年度碳配额分配方案');
+
+-- 默认告警规则
+INSERT INTO alarm_rules (id, name, category, target_type, condition_type, condition_params, severity) VALUES
+('rule-quota-80', '碳配额使用80%预警', 'carbon_quota', 'site', 'threshold', '{"field":"quota_usage_pct","operator":">=","value":80}', 'warning'),
+('rule-quota-95', '碳配额使用95%严重预警', 'carbon_quota', 'site', 'threshold', '{"field":"quota_usage_pct","operator":">=","value":95}', 'critical'),
+('rule-device-offline', '设备离线告警', 'device_offline', 'device', 'absence', '{"timeout_minutes":10}', 'warning'),
+('rule-energy-spike', '能耗异常突增告警', 'energy_anomaly', 'area', 'rate_of_change', '{"field":"consumption","period":"1h","change_pct":50}', 'warning');
+
+-- 默认电价配置 (峰谷平)
+INSERT INTO energy_prices (id, energy_type, price_type, tou_config, unit, valid_from) VALUES
+('price-elec-tou', 'electricity', 'tou', '{"peak":{"price":1.05,"periods":["08:00-11:00","18:00-21:00"]},"normal":{"price":0.65,"periods":["07:00-08:00","11:00-18:00","21:00-23:00"]},"valley":{"price":0.35,"periods":["23:00-07:00"]}}', 'CNY/kWh', '2024-01-01');
+
+INSERT INTO energy_prices (id, energy_type, price_type, price_value, unit, valid_from) VALUES
+('price-gas', 'gas', 'flat', 3.50, 'CNY/m3', '2024-01-01'),
+('price-water', 'water', 'flat', 4.80, 'CNY/m3', '2024-01-01'),
+('price-steam', 'steam', 'flat', 280.0, 'CNY/t', '2024-01-01');
+
+-- 系统配置
+INSERT INTO system_config (key, value, description) VALUES
+('company_name', '智能制造有限公司', '企业名称'),
+('carbon_calc_interval', '3600', '碳排放计算间隔(秒)'),
+('data_simulator_enabled', 'true', '是否启用数据模拟器');
+

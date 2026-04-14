@@ -1,0 +1,1996 @@
+/**
+ * ============================================================
+ * 双碳数据采集系统 — 前端源代码
+ * 技术栈: React 18 + Ant Design 5 + ECharts 5 + TypeScript + Vite
+ * ============================================================
+ */
+
+
+// ===========================================================
+// 文件: frontend/src/main.tsx
+// 说明: 应用入口文件
+// ===========================================================
+
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
+// ===========================================================
+// 文件: frontend/src/App.tsx
+// 说明: 应用根组件与路由配置
+// ===========================================================
+
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ConfigProvider } from 'antd'
+import zhCN from 'antd/locale/zh_CN'
+import MainLayout from './components/Layout'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import EnergyMonitor from './pages/EnergyMonitor'
+import CarbonAnalysis from './pages/CarbonAnalysis'
+import DeviceManagement from './pages/DeviceManagement'
+import DataCollection from './pages/DataCollection'
+import AlarmCenter from './pages/AlarmCenter'
+import ReportCenter from './pages/ReportCenter'
+import EmissionFactors from './pages/EmissionFactors'
+import SystemSettings from './pages/SystemSettings'
+import { useAuthStore } from './store/auth'
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuthStore()
+  if (!isAuthenticated()) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+export default function App() {
+  return (
+    <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#1677ff' } }}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="energy-monitor" element={<EnergyMonitor />} />
+            <Route path="carbon-analysis" element={<CarbonAnalysis />} />
+            <Route path="devices" element={<DeviceManagement />} />
+            <Route path="data-collection" element={<DataCollection />} />
+            <Route path="alarms" element={<AlarmCenter />} />
+            <Route path="reports" element={<ReportCenter />} />
+            <Route path="emission-factors" element={<EmissionFactors />} />
+            <Route path="areas" element={<SystemSettings />} />
+            <Route path="users" element={<SystemSettings />} />
+            <Route path="settings" element={<SystemSettings />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ConfigProvider>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/types/index.ts
+// 说明: 全局TypeScript类型定义
+// ===========================================================
+
+export type EnergyType = 'electricity' | 'gas' | 'water' | 'steam'
+export type Scope = 'scope1' | 'scope2' | 'scope3'
+export type AlarmSeverity = 'info' | 'warning' | 'critical'
+export type AlarmStatus = 'active' | 'acknowledged' | 'resolved'
+
+export interface ApiResponse<T = any> {
+  code: number
+  message: string
+  data?: T
+  total?: number
+  page?: number
+  pageSize?: number
+}
+
+export interface Device {
+  id: string
+  name: string
+  energy_type: EnergyType
+  device_type: string
+  protocol: string
+  area_id: string
+  area_name?: string
+  scope: Scope
+  status: string
+  manufacturer?: string
+  model?: string
+  last_seen_at?: string
+  created_at: string
+}
+
+export interface EmissionFactor {
+  id: string
+  energy_type: string
+  name: string
+  factor_value: number
+  factor_unit: string
+  source_unit: string
+  scope: string
+  region?: string
+  source?: string
+  valid_year?: number
+  is_default: number
+  status: string
+}
+
+export interface AlarmRecord {
+  id: string
+  rule_id: string
+  rule_name?: string
+  category?: string
+  device_id?: string
+  area_id?: string
+  severity: AlarmSeverity
+  title: string
+  message: string
+  current_value?: number
+  threshold_value?: number
+  status: AlarmStatus
+  created_at: string
+  acknowledged_at?: string
+  resolved_at?: string
+}
+
+export interface Area {
+  id: string
+  name: string
+  parent_id?: string
+  type: string
+  description?: string
+  sort_order: number
+}
+
+export interface DashboardOverview {
+  carbonEmission: {
+    today: number
+    thisMonth: number
+    thisYear: number
+    quota: number
+    quotaUsagePct: number
+  }
+  deviceSummary: {
+    total: number
+    online: number
+    offline: number
+    warning: number
+  }
+  alarmSummary: {
+    active: number
+    critical: number
+    warning: number
+  }
+}
+
+export interface EnergyRealtimeData {
+  deviceId: string
+  energyType: EnergyType
+  areaId: string
+  timestamp: string
+  data: Record<string, number>
+}
+
+
+// ===========================================================
+// 文件: frontend/src/services/api.ts
+// 说明: Axios HTTP请求封装
+// ===========================================================
+
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: '/api/v1',
+  timeout: 15000,
+})
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error.response?.data || error)
+  }
+)
+
+export default api
+
+
+// ===========================================================
+// 文件: frontend/src/services/socket.ts
+// 说明: Socket.IO实时通信服务
+// ===========================================================
+
+import { io, Socket } from 'socket.io-client'
+
+let socket: Socket | null = null
+
+export function getSocket(): Socket {
+  if (!socket) {
+    socket = io('/', {
+      path: '/socket.io',
+      transports: ['websocket', 'polling'],
+    })
+  }
+  return socket
+}
+
+export function disconnectSocket(): void {
+  if (socket) {
+    socket.disconnect()
+    socket = null
+  }
+}
+
+
+// ===========================================================
+// 文件: frontend/src/store/auth.ts
+// 说明: Zustand认证状态管理
+// ===========================================================
+
+import { create } from 'zustand'
+
+interface User {
+  id: string
+  username: string
+  fullName: string
+  role: string
+}
+
+interface AuthState {
+  token: string | null
+  user: User | null
+  setAuth: (token: string, user: User) => void
+  logout: () => void
+  isAuthenticated: () => boolean
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
+  token: localStorage.getItem('token'),
+  user: JSON.parse(localStorage.getItem('user') || 'null'),
+
+  setAuth: (token, user) => {
+    localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(user))
+    set({ token, user })
+  },
+
+  logout: () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    set({ token: null, user: null })
+  },
+
+  isAuthenticated: () => !!get().token,
+}))
+
+
+// ===========================================================
+// 文件: frontend/src/components/Layout/index.tsx
+// 说明: 主布局组件(侧边栏+顶栏)
+// ===========================================================
+
+import { useState } from 'react'
+import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Layout, Menu, Button, Dropdown, Avatar, theme } from 'antd'
+import {
+  DashboardOutlined,
+  ThunderboltOutlined,
+  BarChartOutlined,
+  MonitorOutlined,
+  FormOutlined,
+  AlertOutlined,
+  FileTextOutlined,
+  SettingOutlined,
+  ExperimentOutlined,
+  ApartmentOutlined,
+  UserOutlined,
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+} from '@ant-design/icons'
+import { useAuthStore } from '../../store/auth'
+
+const { Header, Sider, Content } = Layout
+
+const menuItems = [
+  { key: '/dashboard', icon: <DashboardOutlined />, label: '碳排放总览' },
+  { key: '/energy-monitor', icon: <ThunderboltOutlined />, label: '能耗监测' },
+  { key: '/carbon-analysis', icon: <BarChartOutlined />, label: '碳排放分析' },
+  { key: '/devices', icon: <MonitorOutlined />, label: '设备管理' },
+  { key: '/data-collection', icon: <FormOutlined />, label: '数据采集' },
+  { key: '/alarms', icon: <AlertOutlined />, label: '告警中心' },
+  { key: '/reports', icon: <FileTextOutlined />, label: '报表中心' },
+  {
+    key: 'system',
+    icon: <SettingOutlined />,
+    label: '系统管理',
+    children: [
+      { key: '/emission-factors', icon: <ExperimentOutlined />, label: '排放因子库' },
+      { key: '/areas', icon: <ApartmentOutlined />, label: '区域管理' },
+      { key: '/users', icon: <UserOutlined />, label: '用户管理' },
+      { key: '/settings', icon: <SettingOutlined />, label: '系统设置' },
+    ],
+  },
+]
+
+export default function MainLayout() {
+  const [collapsed, setCollapsed] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { user, logout } = useAuthStore()
+  const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken()
+
+  const handleMenuClick = ({ key }: { key: string }) => {
+    navigate(key)
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const userMenu = {
+    items: [
+      { key: 'profile', icon: <UserOutlined />, label: user?.fullName || user?.username },
+      { type: 'divider' as const },
+      { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
+    ],
+  }
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Sider trigger={null} collapsible collapsed={collapsed} width={220}
+        style={{ background: '#001529' }}>
+        <div style={{
+          height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontSize: collapsed ? 14 : 18, fontWeight: 'bold', whiteSpace: 'nowrap',
+          overflow: 'hidden', borderBottom: '1px solid rgba(255,255,255,0.1)',
+        }}>
+          {collapsed ? '双碳' : '双碳数据采集系统'}
+        </div>
+        <Menu
+          theme="dark"
+          mode="inline"
+          selectedKeys={[location.pathname]}
+          defaultOpenKeys={['system']}
+          items={menuItems}
+          onClick={handleMenuClick}
+        />
+      </Sider>
+      <Layout>
+        <Header style={{
+          padding: '0 24px', background: colorBgContainer,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          borderBottom: '1px solid #f0f0f0',
+        }}>
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed(!collapsed)}
+          />
+          <Dropdown menu={userMenu} placement="bottomRight">
+            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1677ff' }} />
+              <span>{user?.fullName || user?.username}</span>
+            </div>
+          </Dropdown>
+        </Header>
+        <Content style={{ margin: 16, padding: 24, background: colorBgContainer, borderRadius: borderRadiusLG, overflow: 'auto' }}>
+          <Outlet />
+        </Content>
+      </Layout>
+    </Layout>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/Login/index.tsx
+// 说明: 登录页面
+// ===========================================================
+
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Form, Input, Button, Card, message, Typography } from 'antd'
+import { UserOutlined, LockOutlined } from '@ant-design/icons'
+import { useAuthStore } from '../../store/auth'
+import api from '../../services/api'
+
+const { Title, Text } = Typography
+
+export default function Login() {
+  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+  const { setAuth } = useAuthStore()
+
+  const onFinish = async (values: { username: string; password: string }) => {
+    setLoading(true)
+    try {
+      const res: any = await api.post('/auth/login', values)
+      if (res.code === 0) {
+        setAuth(res.data.token, res.data.user)
+        message.success('登录成功')
+        navigate('/dashboard')
+      } else {
+        message.error(res.message)
+      }
+    } catch (err: any) {
+      message.error(err?.message || '登录失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{
+      height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    }}>
+      <Card style={{ width: 420, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <Title level={3} style={{ margin: 0 }}>双碳数据采集系统</Title>
+          <Text type="secondary">Carbon Data Collection System</Text>
+        </div>
+        <Form name="login" onFinish={onFinish} size="large" initialValues={{ username: 'admin', password: 'admin123' }}>
+          <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]}>
+            <Input prefix={<UserOutlined />} placeholder="用户名" />
+          </Form.Item>
+          <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input.Password prefix={<LockOutlined />} placeholder="密码" />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={loading} block>
+              登 录
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+    </div>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/Dashboard/index.tsx
+// 说明: 碳排放总览仪表盘页面
+// ===========================================================
+
+import { useEffect, useState } from 'react'
+import { Row, Col, Card, Statistic, Tag, Spin } from 'antd'
+import {
+  ArrowDownOutlined,
+  CloudOutlined, AlertOutlined, MonitorOutlined,
+} from '@ant-design/icons'
+import ReactECharts from 'echarts-for-react'
+import api from '../../services/api'
+import type { DashboardOverview } from '../../types'
+import dayjs from 'dayjs'
+
+export default function Dashboard() {
+  const [loading, setLoading] = useState(true)
+  const [overview, setOverview] = useState<DashboardOverview | null>(null)
+  const [carbonTrend, setCarbonTrend] = useState<any>(null)
+  const [areaBreakdown, setAreaBreakdown] = useState<any[]>([])
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [overviewRes, trendRes, areaRes]: any[] = await Promise.all([
+        api.get('/dashboard/overview'),
+        api.get('/dashboard/carbon-trend', { params: { year: dayjs().year() } }),
+        api.get('/dashboard/area-breakdown'),
+      ])
+      if (overviewRes.code === 0) setOverview(overviewRes.data)
+      if (trendRes.code === 0) setCarbonTrend(trendRes.data)
+      if (areaRes.code === 0) setAreaBreakdown(areaRes.data)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  const carbonTrendOption = {
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['碳排放量', '碳配额'] },
+    xAxis: {
+      type: 'category',
+      data: carbonTrend?.months?.map((_: any, i: number) => `${i + 1}月`) || Array.from({ length: 12 }, (_, i) => `${i + 1}月`),
+    },
+    yAxis: { type: 'value', name: 'tCO₂e' },
+    series: [
+      {
+        name: '碳排放量',
+        type: 'bar',
+        data: carbonTrend?.emission?.length ? carbonTrend.emission : [320, 280, 350, 310, 290, 340, 360, 380, 330, 300, 270, 0],
+        itemStyle: { color: '#5470c6' },
+      },
+      {
+        name: '碳配额',
+        type: 'line',
+        data: carbonTrend?.quota?.length ? carbonTrend.quota : Array(12).fill(375),
+        itemStyle: { color: '#ee6666' },
+        lineStyle: { type: 'dashed' },
+      },
+    ],
+  }
+
+  const scopePieOption = {
+    tooltip: { trigger: 'item' },
+    legend: { bottom: 0 },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      label: { formatter: '{b}: {d}%' },
+      data: [
+        { value: 22, name: '范围一(直接排放)', itemStyle: { color: '#ee6666' } },
+        { value: 68, name: '范围二(间接排放)', itemStyle: { color: '#5470c6' } },
+        { value: 10, name: '范围三(其他)', itemStyle: { color: '#91cc75' } },
+      ],
+    }],
+  }
+
+  const energyPieOption = {
+    tooltip: { trigger: 'item' },
+    legend: { bottom: 0 },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      label: { formatter: '{b}: {d}%' },
+      data: [
+        { value: 68, name: '电力', itemStyle: { color: '#5470c6' } },
+        { value: 22, name: '天然气', itemStyle: { color: '#ee6666' } },
+        { value: 8, name: '蒸汽', itemStyle: { color: '#fac858' } },
+        { value: 2, name: '其他', itemStyle: { color: '#91cc75' } },
+      ],
+    }],
+  }
+
+  const areaBarOption = {
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'value', name: 'tCO₂e' },
+    yAxis: {
+      type: 'category',
+      data: areaBreakdown.length ? areaBreakdown.map(a => a.areaName) : ['生产车间A', '生产车间B', '办公楼', '仓库', '动力中心'],
+    },
+    series: [{
+      type: 'bar',
+      data: areaBreakdown.length ? areaBreakdown.map(a => a.carbonEmission) : [180, 140, 45, 30, 55],
+      itemStyle: { color: '#5470c6' },
+    }],
+  }
+
+  if (loading) return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', marginTop: 100 }} />
+
+  const co2 = overview?.carbonEmission
+  const devices = overview?.deviceSummary
+  const alarms = overview?.alarmSummary
+
+  return (
+    <div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="年度碳排放量"
+              value={co2?.thisYear || 1842.5}
+              precision={1}
+              suffix="tCO₂e"
+              prefix={<CloudOutlined style={{ color: '#5470c6' }} />}
+            />
+            <div style={{ marginTop: 8 }}>
+              <Tag color="blue">配额使用 {co2?.quotaUsagePct?.toFixed(1) || '40.9'}%</Tag>
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="本月碳排放量"
+              value={co2?.thisMonth || 156.8}
+              precision={1}
+              suffix="tCO₂e"
+              prefix={<ArrowDownOutlined style={{ color: '#3f8600' }} />}
+              valueStyle={{ color: '#3f8600' }}
+            />
+            <div style={{ marginTop: 8 }}><Tag color="green">环比下降 3.2%</Tag></div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="在线设备"
+              value={devices?.online || 7}
+              suffix={`/ ${devices?.total || 7}`}
+              prefix={<MonitorOutlined style={{ color: '#1677ff' }} />}
+            />
+            <div style={{ marginTop: 8 }}>
+              {(devices?.warning || 0) > 0 && <Tag color="orange">告警 {devices?.warning}</Tag>}
+              {(devices?.offline || 0) > 0 && <Tag color="red">离线 {devices?.offline}</Tag>}
+              {!(devices?.warning || devices?.offline) && <Tag color="green">全部正常</Tag>}
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="活跃告警"
+              value={alarms?.active || 0}
+              prefix={<AlertOutlined style={{ color: alarms?.critical ? '#ff4d4f' : '#faad14' }} />}
+              valueStyle={{ color: alarms?.critical ? '#ff4d4f' : undefined }}
+            />
+            <div style={{ marginTop: 8 }}>
+              {(alarms?.critical || 0) > 0 && <Tag color="red">严重 {alarms?.critical}</Tag>}
+              {(alarms?.warning || 0) > 0 && <Tag color="orange">警告 {alarms?.warning}</Tag>}
+              {!alarms?.active && <Tag color="green">无告警</Tag>}
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={16}>
+          <Card title="碳排放趋势（月度）">
+            <ReactECharts option={carbonTrendOption} style={{ height: 350 }} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="排放范围分布">
+            <ReactECharts option={scopePieOption} style={{ height: 350 }} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={12}>
+          <Card title="能源类型碳排放占比">
+            <ReactECharts option={energyPieOption} style={{ height: 300 }} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="区域碳排放分布">
+            <ReactECharts option={areaBarOption} style={{ height: 300 }} />
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/EnergyMonitor/index.tsx
+// 说明: 能耗实时监测页面
+// ===========================================================
+
+import { useEffect, useState, useCallback } from 'react'
+import { Card, Tabs, Row, Col, Table, Badge, Statistic, Tag, Select, Space } from 'antd'
+import {
+  ThunderboltOutlined,
+  FireOutlined,
+  ExperimentOutlined,
+  CloudOutlined,
+} from '@ant-design/icons'
+import ReactECharts from 'echarts-for-react'
+import api from '../../services/api'
+import { getSocket } from '../../services/socket'
+import type { EnergyRealtimeData } from '../../types'
+
+const energyTabs = [
+  { key: 'electricity', label: '电力', unit: 'kW', totalUnit: 'kWh', icon: <ThunderboltOutlined />, color: '#5470c6' },
+  { key: 'gas', label: '天然气', unit: 'm³/h', totalUnit: 'm³', icon: <FireOutlined />, color: '#ee6666' },
+  { key: 'water', label: '水', unit: 'm³/h', totalUnit: 'm³', icon: <ExperimentOutlined />, color: '#73c0de' },
+  { key: 'steam', label: '蒸汽', unit: 't/h', totalUnit: 't', icon: <CloudOutlined />, color: '#fac858' },
+]
+
+// 根据能源类型获取主要字段
+const getMainField = (type: string): string => {
+  switch (type) {
+    case 'electricity': return 'active_power'
+    case 'gas': return 'flow_rate'
+    case 'water': return 'flow_rate'
+    case 'steam': return 'flow_rate'
+    default: return 'active_power'
+  }
+}
+
+// 根据能源类型获取累计字段
+const getTotalField = (type: string): string => {
+  switch (type) {
+    case 'electricity': return 'total_energy'
+    case 'gas': return 'total_volume'
+    case 'water': return 'total_volume'
+    case 'steam': return 'total_mass'
+    default: return 'total_energy'
+  }
+}
+
+export default function EnergyMonitor() {
+  const [activeTab, setActiveTab] = useState('electricity')
+  const [realtimeData, setRealtimeData] = useState<EnergyRealtimeData[]>([])
+  const [areaFilter, setAreaFilter] = useState<string>('')
+  const [trendHistory, setTrendHistory] = useState<{ time: string; value: number }[]>([])
+
+  // 加载实时数据
+  const loadRealtime = useCallback(async () => {
+    try {
+      const params: any = { energyType: activeTab }
+      if (areaFilter) params.areaId = areaFilter
+      const res: any = await api.get('/data/realtime', { params })
+      if (res.code === 0) setRealtimeData(res.data)
+    } catch { /* ignore */ }
+  }, [activeTab, areaFilter])
+
+  useEffect(() => {
+    loadRealtime()
+    const socket = getSocket()
+    socket.emit('subscribe:energy', { energyTypes: [activeTab] })
+    socket.on('energy:realtime', (data: EnergyRealtimeData) => {
+      if (data.energyType === activeTab) {
+        setRealtimeData(prev => {
+          const idx = prev.findIndex(d => d.deviceId === data.deviceId)
+          if (idx >= 0) { const next = [...prev]; next[idx] = data; return next }
+          return [...prev, data]
+        })
+        // 更新趋势历史
+        const mainField = getMainField(activeTab)
+        const val = data.data?.[mainField]
+        if (val !== undefined) {
+          setTrendHistory(prev => {
+            const next = [...prev, { time: new Date().toLocaleTimeString(), value: val }]
+            return next.length > 60 ? next.slice(-60) : next
+          })
+        }
+      }
+    })
+    return () => { socket.off('energy:realtime') }
+  }, [activeTab, loadRealtime])
+
+  // 定时刷新
+  useEffect(() => {
+    const timer = setInterval(loadRealtime, 30000)
+    return () => clearInterval(timer)
+  }, [loadRealtime])
+
+  // 当前Tab信息
+  const currentTab = energyTabs.find(t => t.key === activeTab)!
+  const mainField = getMainField(activeTab)
+  const totalField = getTotalField(activeTab)
+
+  // 计算汇总统计
+  const totalPower = realtimeData.reduce((sum, d) => sum + (d.data?.[mainField] || 0), 0)
+  const totalConsumption = realtimeData.reduce((sum, d) => sum + (d.data?.[totalField] || 0), 0)
+  const onlineCount = realtimeData.length
+  const maxPower = realtimeData.length > 0 ? Math.max(...realtimeData.map(d => d.data?.[mainField] || 0)) : 0
+
+  // 生成24小时趋势数据
+  const now = Date.now()
+  const timeLabels = Array.from({ length: 24 }, (_, i) => {
+    const t = new Date(now - (23 - i) * 3600000)
+    return `${t.getHours().toString().padStart(2, '0')}:00`
+  })
+  const demoTrendData = Array.from({ length: 24 }, (_, i) => {
+    // 模拟白天高、夜间低的用能曲线
+    const hour = (new Date(now - (23 - i) * 3600000)).getHours()
+    const base = activeTab === 'electricity' ? 80 : activeTab === 'gas' ? 20 : activeTab === 'water' ? 10 : 6
+    const dayFactor = (hour >= 8 && hour <= 18) ? 1.5 : (hour >= 6 && hour <= 20) ? 1.2 : 0.6
+    return +(base * dayFactor + (Math.random() - 0.5) * base * 0.3).toFixed(2)
+  })
+
+  // 24小时趋势图配置
+  const trendOption = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        const p = params[0]
+        return `${p.axisValue}<br/>${p.seriesName}: ${p.value} ${currentTab.unit}`
+      },
+    },
+    grid: { left: 60, right: 30, top: 40, bottom: 40 },
+    xAxis: {
+      type: 'category',
+      data: timeLabels,
+      axisLabel: { interval: 2, rotate: 0 },
+    },
+    yAxis: {
+      type: 'value',
+      name: currentTab.unit,
+      nameTextStyle: { padding: [0, 40, 0, 0] },
+    },
+    series: [{
+      name: `${currentTab.label}消耗`,
+      type: 'line',
+      smooth: true,
+      data: demoTrendData,
+      areaStyle: { opacity: 0.25, color: currentTab.color },
+      itemStyle: { color: currentTab.color },
+      lineStyle: { width: 2 },
+      symbol: 'none',
+    }],
+  }
+
+  // 各区域能耗对比图配置
+  const areaNames = ['生产车间A', '生产车间B', '办公楼', '仓库', '动力中心']
+  const areaData = activeTab === 'electricity'
+    ? [78, 62, 13, 8, 25]
+    : activeTab === 'gas' ? [15, 0, 0, 0, 25]
+    : activeTab === 'water' ? [3, 2, 1.5, 0.5, 1]
+    : [0, 0, 0, 0, 5]
+  const areaCompareOption = {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 80, right: 30, top: 20, bottom: 30 },
+    xAxis: { type: 'value', name: currentTab.unit },
+    yAxis: { type: 'category', data: areaNames },
+    series: [{
+      type: 'bar',
+      data: areaData,
+      itemStyle: { color: currentTab.color, borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: 'right', formatter: `{c} ${currentTab.unit}` },
+    }],
+  }
+
+  // 设备数据表格列定义
+  const columns = [
+    { title: '设备ID', dataIndex: 'deviceId', key: 'deviceId', width: 100 },
+    {
+      title: '设备名称', key: 'deviceName',
+      render: (_: any, record: EnergyRealtimeData) => {
+        const nameMap: Record<string, string> = {
+          'EM-001': '1#车间总电表', 'EM-002': '2#车间总电表', 'EM-003': '办公楼电表',
+          'GM-001': '1#车间燃气表', 'GM-002': '动力中心燃气表',
+          'WM-001': '总水表', 'SM-001': '动力中心蒸汽表',
+        }
+        return nameMap[record.deviceId] || record.deviceId
+      },
+    },
+    {
+      title: '所属区域', key: 'area',
+      render: (_: any, record: EnergyRealtimeData) => {
+        const areaMap: Record<string, string> = {
+          'area-workshop-a': '生产车间A', 'area-workshop-b': '生产车间B',
+          'area-office': '办公楼', 'area-warehouse': '仓库', 'area-power': '动力中心',
+        }
+        return areaMap[record.areaId] || record.areaId
+      },
+    },
+    {
+      title: '状态', key: 'status', width: 80,
+      render: () => <Badge status="success" text="在线" />,
+    },
+    {
+      title: `瞬时值 (${currentTab.unit})`, key: 'instantValue',
+      render: (_: any, record: EnergyRealtimeData) => {
+        const val = record.data?.[mainField]
+        return val !== undefined ? <span style={{ fontWeight: 'bold', color: currentTab.color }}>{val.toFixed(2)}</span> : '--'
+      },
+    },
+    {
+      title: `累计值 (${currentTab.totalUnit})`, key: 'totalValue',
+      render: (_: any, record: EnergyRealtimeData) => {
+        const val = record.data?.[totalField]
+        return val !== undefined ? val.toFixed(1) : '--'
+      },
+    },
+    ...(activeTab === 'electricity' ? [
+      {
+        title: '电压 (V)', key: 'voltage',
+        render: (_: any, record: EnergyRealtimeData) => record.data?.voltage?.toFixed(1) || '--',
+      },
+      {
+        title: '电流 (A)', key: 'current',
+        render: (_: any, record: EnergyRealtimeData) => record.data?.current?.toFixed(1) || '--',
+      },
+      {
+        title: '功率因数', key: 'pf',
+        render: (_: any, record: EnergyRealtimeData) => record.data?.power_factor?.toFixed(3) || '--',
+      },
+    ] : []),
+    ...(activeTab !== 'electricity' && activeTab !== 'water' ? [
+      {
+        title: '温度 (°C)', key: 'temperature',
+        render: (_: any, record: EnergyRealtimeData) => record.data?.temperature?.toFixed(1) || '--',
+      },
+    ] : []),
+    ...(activeTab !== 'electricity' ? [
+      {
+        title: '压力 (MPa)', key: 'pressure',
+        render: (_: any, record: EnergyRealtimeData) => record.data?.pressure?.toFixed(3) || '--',
+      },
+    ] : []),
+    {
+      title: '更新时间', dataIndex: 'timestamp', key: 'timestamp', width: 100,
+      render: (t: string) => t ? new Date(t).toLocaleTimeString() : '--',
+    },
+  ]
+
+  return (
+    <div>
+      <Tabs
+        activeKey={activeTab}
+        onChange={(key) => { setActiveTab(key); setTrendHistory([]) }}
+        items={energyTabs.map(t => ({
+          key: t.key,
+          label: <span>{t.icon} {t.label}</span>,
+        }))}
+        tabBarExtraContent={
+          <Select
+            value={areaFilter}
+            onChange={setAreaFilter}
+            style={{ width: 140 }}
+            allowClear
+            placeholder="区域筛选"
+            options={[
+              { value: 'area-workshop-a', label: '生产车间A' },
+              { value: 'area-workshop-b', label: '生产车间B' },
+              { value: 'area-office', label: '办公楼' },
+              { value: 'area-power', label: '动力中心' },
+            ]}
+          />
+        }
+      />
+
+      {/* 汇总统计卡片 */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title={`当前总${activeTab === 'electricity' ? '功率' : '流量'}`}
+              value={totalPower}
+              precision={2}
+              suffix={currentTab.unit}
+              valueStyle={{ color: currentTab.color }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="今日累计消耗"
+              value={totalConsumption}
+              precision={1}
+              suffix={currentTab.totalUnit}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="峰值"
+              value={maxPower}
+              precision={2}
+              suffix={currentTab.unit}
+              valueStyle={{ color: '#ee6666' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} md={6}>
+          <Card>
+            <Statistic
+              title="在线设备数"
+              value={onlineCount}
+              suffix="台"
+              prefix={<Badge status="success" />}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 趋势图 + 区域对比 */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={16}>
+          <Card title={`${currentTab.label} 消耗趋势（24h）`}>
+            <ReactECharts option={trendOption} style={{ height: 320 }} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Card title="各区域能耗对比">
+            <ReactECharts option={areaCompareOption} style={{ height: 320 }} />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 设备实时数据表 */}
+      <Card title={`${currentTab.label}设备实时数据`} style={{ marginTop: 16 }}
+        extra={<Tag color="green">每10秒自动刷新</Tag>}>
+        <Table
+          dataSource={realtimeData}
+          columns={columns}
+          rowKey="deviceId"
+          pagination={false}
+          size="middle"
+          scroll={{ x: 'max-content' }}
+        />
+      </Card>
+    </div>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/CarbonAnalysis/index.tsx
+// 说明: 碳排放分析页面
+// ===========================================================
+
+import { useEffect, useState } from 'react'
+import { Card, Row, Col, Select, Space, Statistic, Table, Tag } from 'antd'
+import {
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+} from '@ant-design/icons'
+import ReactECharts from 'echarts-for-react'
+import api from '../../services/api'
+import dayjs from 'dayjs'
+
+// 碳排放效率指标接口
+interface EfficiencyMetric {
+  name: string
+  current: number
+  target: number
+  industry: number
+  unit: string
+  status: 'good' | 'warning' | 'danger'
+}
+
+export default function CarbonAnalysis() {
+  const [year, setYear] = useState(dayjs().year())
+  const [scope, setScope] = useState<string>('all')
+  const [trendData, setTrendData] = useState<any>(null)
+  const [quotaStatus, setQuotaStatus] = useState<any>(null)
+
+  useEffect(() => {
+    loadData()
+  }, [year, scope])
+
+  const loadData = async () => {
+    try {
+      const [trendRes, quotaRes]: any[] = await Promise.all([
+        api.get('/carbon/trend', { params: { year } }),
+        api.get('/carbon/quota-status', { params: { year } }),
+      ])
+      if (trendRes.code === 0) setTrendData(trendRes.data)
+      if (quotaRes.code === 0) setQuotaStatus(quotaRes.data)
+    } catch { /* ignore */ }
+  }
+
+  const months = Array.from({ length: 12 }, (_, i) => `${i + 1}月`)
+  const demoEmission = [320, 280, 350, 310, 290, 340, 360, 380, 330, 300, 270, 250]
+  const emission = trendData?.values?.length ? trendData.values : demoEmission
+  const totalEmission = emission.reduce((a: number, b: number) => a + b, 0)
+  const monthlyQuota = quotaStatus?.monthlyQuota || 375
+
+  // 碳排放趋势图
+  const trendOption = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        let html = `<b>${params[0].axisValue}</b><br/>`
+        params.forEach((p: any) => {
+          html += `${p.marker} ${p.seriesName}: ${p.value?.toFixed(1)} tCO₂e<br/>`
+        })
+        return html
+      },
+    },
+    legend: { data: ['碳排放量', '月度配额', '累计排放'] },
+    grid: { left: 60, right: 60, top: 50, bottom: 40 },
+    xAxis: { type: 'category', data: months },
+    yAxis: [
+      { type: 'value', name: '月度排放 (tCO₂e)', position: 'left' },
+      { type: 'value', name: '累计排放 (tCO₂e)', position: 'right' },
+    ],
+    series: [
+      {
+        name: '碳排放量',
+        type: 'bar',
+        data: emission,
+        itemStyle: {
+          color: (params: any) => params.value > monthlyQuota ? '#ee6666' : '#5470c6',
+          borderRadius: [4, 4, 0, 0],
+        },
+      },
+      {
+        name: '月度配额',
+        type: 'line',
+        data: Array(12).fill(monthlyQuota),
+        itemStyle: { color: '#ee6666' },
+        lineStyle: { type: 'dashed', width: 2 },
+        symbol: 'none',
+      },
+      {
+        name: '累计排放',
+        type: 'line',
+        yAxisIndex: 1,
+        data: emission.reduce((acc: number[], v: number) => {
+          acc.push((acc.length > 0 ? acc[acc.length - 1] : 0) + v)
+          return acc
+        }, []),
+        smooth: true,
+        itemStyle: { color: '#fac858' },
+        lineStyle: { width: 2 },
+      },
+    ],
+  }
+
+  // Scope堆叠图
+  const scope1Ratio = 0.22, scope2Ratio = 0.68, scope3Ratio = 0.10
+  const scopeStackOption = {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: ['范围一(直接排放)', '范围二(间接排放)', '范围三(其他间接)'] },
+    grid: { left: 60, right: 30, top: 50, bottom: 40 },
+    xAxis: { type: 'category', data: months },
+    yAxis: { type: 'value', name: 'tCO₂e' },
+    series: [
+      {
+        name: '范围一(直接排放)',
+        type: 'bar', stack: 'total',
+        data: emission.map((v: number) => +(v * scope1Ratio).toFixed(1)),
+        itemStyle: { color: '#ee6666' },
+      },
+      {
+        name: '范围二(间接排放)',
+        type: 'bar', stack: 'total',
+        data: emission.map((v: number) => +(v * scope2Ratio).toFixed(1)),
+        itemStyle: { color: '#5470c6' },
+      },
+      {
+        name: '范围三(其他间接)',
+        type: 'bar', stack: 'total',
+        data: emission.map((v: number) => +(v * scope3Ratio).toFixed(1)),
+        itemStyle: { color: '#91cc75' },
+      },
+    ],
+  }
+
+  // 同比分析图
+  const lastYearEmission = emission.map((v: number) => +(v * (1.05 + Math.random() * 0.1)).toFixed(1))
+  const yoyOption = {
+    tooltip: { trigger: 'axis' },
+    legend: { data: [`${year}年`, `${year - 1}年`] },
+    grid: { left: 60, right: 30, top: 50, bottom: 40 },
+    xAxis: { type: 'category', data: months },
+    yAxis: { type: 'value', name: 'tCO₂e' },
+    series: [
+      { name: `${year}年`, type: 'bar', data: emission, itemStyle: { color: '#5470c6', borderRadius: [4, 4, 0, 0] } },
+      { name: `${year - 1}年`, type: 'bar', data: lastYearEmission, itemStyle: { color: '#91cc75', borderRadius: [4, 4, 0, 0] } },
+    ],
+  }
+
+  // 能源类型碳排放瀑布图
+  const waterfallOption = {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 80, right: 30, top: 30, bottom: 40 },
+    xAxis: { type: 'category', data: ['电力', '天然气', '蒸汽', '自来水', '合计'] },
+    yAxis: { type: 'value', name: 'tCO₂e' },
+    series: [
+      {
+        type: 'bar', stack: 'waterfall',
+        data: [0, +(totalEmission * 0.68).toFixed(0), +(totalEmission * 0.68 + totalEmission * 0.22).toFixed(0), +(totalEmission * 0.90).toFixed(0), 0],
+        itemStyle: { color: 'transparent' },
+      },
+      {
+        type: 'bar', stack: 'waterfall',
+        data: [
+          +(totalEmission * 0.68).toFixed(0),
+          +(totalEmission * 0.22).toFixed(0),
+          +(totalEmission * 0.08).toFixed(0),
+          +(totalEmission * 0.02).toFixed(0),
+          totalEmission,
+        ],
+        itemStyle: {
+          color: (params: any) => ['#5470c6', '#ee6666', '#fac858', '#91cc75', '#73c0de'][params.dataIndex],
+          borderRadius: [4, 4, 0, 0],
+        },
+        label: { show: true, position: 'top', formatter: '{c} tCO₂e' },
+      },
+    ],
+  }
+
+  // 碳排放效率指标
+  const efficiencyMetrics: EfficiencyMetric[] = [
+    { name: '单位产值碳排放', current: 0.85, target: 0.80, industry: 0.95, unit: 'tCO₂e/万元', status: 'warning' },
+    { name: '单位面积碳排放', current: 0.042, target: 0.040, industry: 0.055, unit: 'tCO₂e/m²', status: 'warning' },
+    { name: '人均碳排放', current: 12.5, target: 11.0, industry: 15.0, unit: 'tCO₂e/人', status: 'good' },
+    { name: '碳排放强度(电力)', current: 0.58, target: 0.55, industry: 0.65, unit: 'kgCO₂e/kWh', status: 'good' },
+  ]
+
+  const efficiencyColumns = [
+    { title: '指标名称', dataIndex: 'name', key: 'name' },
+    { title: '当前值', dataIndex: 'current', key: 'current', render: (v: number, r: EfficiencyMetric) => `${v} ${r.unit}` },
+    { title: '目标值', dataIndex: 'target', key: 'target', render: (v: number, r: EfficiencyMetric) => `${v} ${r.unit}` },
+    { title: '行业平均', dataIndex: 'industry', key: 'industry', render: (v: number, r: EfficiencyMetric) => `${v} ${r.unit}` },
+    {
+      title: '达标状态', dataIndex: 'status', key: 'status',
+      render: (s: string) => s === 'good' ? <Tag color="green">达标</Tag> : s === 'warning' ? <Tag color="orange">接近</Tag> : <Tag color="red">超标</Tag>,
+    },
+  ]
+
+  // 年度配额
+  const annualQuota = quotaStatus?.annualQuota || 4500
+  const quotaUsagePct = ((totalEmission / annualQuota) * 100)
+  const yoyChange = -5.2 // 模拟同比变化
+
+  return (
+    <div>
+      {/* 筛选工具栏 */}
+      <Space style={{ marginBottom: 16 }}>
+        <Select value={year} onChange={setYear} style={{ width: 120 }}
+          options={[2024, 2025, 2026].map(y => ({ value: y, label: `${y}年` }))} />
+        <Select value={scope} onChange={setScope} style={{ width: 140 }}
+          options={[
+            { value: 'all', label: '全部范围' },
+            { value: 'scope1', label: '范围一' },
+            { value: 'scope2', label: '范围二' },
+            { value: 'scope3', label: '范围三' },
+          ]} />
+      </Space>
+
+      {/* 汇总卡片 */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic title="年度累计排放" value={totalEmission} precision={1} suffix="tCO₂e" valueStyle={{ color: '#5470c6' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic title="年度碳配额" value={annualQuota} precision={0} suffix="tCO₂e" />
+            <Tag color={quotaUsagePct > 80 ? 'red' : 'blue'} style={{ marginTop: 8 }}>已使用 {quotaUsagePct.toFixed(1)}%</Tag>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic title="剩余配额" value={annualQuota - totalEmission} precision={1} suffix="tCO₂e"
+              valueStyle={{ color: annualQuota - totalEmission > 0 ? '#3f8600' : '#cf1322' }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card>
+            <Statistic
+              title="同比变化"
+              value={Math.abs(yoyChange)}
+              precision={1}
+              suffix="%"
+              prefix={yoyChange < 0 ? <ArrowDownOutlined /> : <ArrowUpOutlined />}
+              valueStyle={{ color: yoyChange < 0 ? '#3f8600' : '#cf1322' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 碳排放趋势 */}
+      <Card title="碳排放月度趋势与配额对比" style={{ marginTop: 16 }}>
+        <ReactECharts option={trendOption} style={{ height: 380 }} />
+      </Card>
+
+      {/* Scope堆叠 + 同比分析 */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={12}>
+          <Card title="Scope 范围分布（堆叠）">
+            <ReactECharts option={scopeStackOption} style={{ height: 320 }} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="同比分析">
+            <ReactECharts option={yoyOption} style={{ height: 320 }} />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 能源类型瀑布图 + 效率指标 */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={12}>
+          <Card title="各能源类型碳排放贡献">
+            <ReactECharts option={waterfallOption} style={{ height: 320 }} />
+          </Card>
+        </Col>
+        <Col xs={24} lg={12}>
+          <Card title="碳排放效率指标">
+            <Table dataSource={efficiencyMetrics} columns={efficiencyColumns} rowKey="name" pagination={false} size="middle" />
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/DeviceManagement/index.tsx
+// 说明: 设备管理页面
+// ===========================================================
+
+import { useEffect, useState } from 'react'
+import { Card, Table, Button, Tag, Space, Modal, Form, Input, Select, message } from 'antd'
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import api from '../../services/api'
+import type { Device } from '../../types'
+
+const statusMap: Record<string, { color: string; text: string }> = {
+  online: { color: 'green', text: '在线' },
+  offline: { color: 'red', text: '离线' },
+  warning: { color: 'orange', text: '告警' },
+  maintenance: { color: 'blue', text: '维护' },
+}
+
+const energyTypeMap: Record<string, string> = {
+  electricity: '电力', gas: '天然气', water: '水', steam: '蒸汽',
+}
+
+export default function DeviceManagement() {
+  const [devices, setDevices] = useState<Device[]>([])
+  const [loading, setLoading] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
+
+  useEffect(() => { loadDevices() }, [])
+
+  const loadDevices = async () => {
+    setLoading(true)
+    try {
+      const res: any = await api.get('/devices')
+      if (res.code === 0) setDevices(res.data)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  const handleCreate = async (values: any) => {
+    try {
+      const res: any = await api.post('/devices', values)
+      if (res.code === 0) {
+        message.success('设备创建成功')
+        setModalOpen(false)
+        form.resetFields()
+        loadDevices()
+      }
+    } catch { message.error('创建失败') }
+  }
+
+  const handleDelete = async (id: string) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除设备 ${id} 吗？`,
+      onOk: async () => {
+        await api.delete(`/devices/${id}`)
+        message.success('已删除')
+        loadDevices()
+      },
+    })
+  }
+
+  const columns = [
+    { title: '设备ID', dataIndex: 'id', key: 'id', width: 100 },
+    { title: '名称', dataIndex: 'name', key: 'name' },
+    { title: '能源类型', dataIndex: 'energy_type', key: 'energy_type', render: (t: string) => energyTypeMap[t] || t },
+    { title: '区域', dataIndex: 'area_name', key: 'area_name' },
+    { title: '协议', dataIndex: 'protocol', key: 'protocol', render: (t: string) => <Tag>{t.toUpperCase()}</Tag> },
+    { title: '范围', dataIndex: 'scope', key: 'scope', render: (s: string) => <Tag color="blue">{s}</Tag> },
+    {
+      title: '状态', dataIndex: 'status', key: 'status',
+      render: (s: string) => <Tag color={statusMap[s]?.color}>{statusMap[s]?.text || s}</Tag>,
+    },
+    {
+      title: '操作', key: 'action',
+      render: (_: any, record: Device) => (
+        <Space>
+          <Button type="link" size="small" danger onClick={() => handleDelete(record.id)}>删除</Button>
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <Card
+      title="设备管理"
+      extra={
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={loadDevices}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>添加设备</Button>
+        </Space>
+      }
+    >
+      <Table dataSource={devices} columns={columns} rowKey="id" loading={loading} />
+
+      <Modal title="添加设备" open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => form.submit()}>
+        <Form form={form} layout="vertical" onFinish={handleCreate}>
+          <Form.Item name="id" label="设备ID"><Input placeholder="如: EM-004" /></Form.Item>
+          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="energy_type" label="能源类型" rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'electricity', label: '电力' }, { value: 'gas', label: '天然气' },
+              { value: 'water', label: '水' }, { value: 'steam', label: '蒸汽' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="protocol" label="通信协议" rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'mqtt', label: 'MQTT' }, { value: 'modbus', label: 'Modbus TCP' },
+              { value: 'http', label: 'HTTP API' }, { value: 'manual', label: '手动录入' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="area_id" label="所属区域" rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'area-workshop-a', label: '生产车间A' }, { value: 'area-workshop-b', label: '生产车间B' },
+              { value: 'area-office', label: '办公楼' }, { value: 'area-warehouse', label: '仓库' },
+              { value: 'area-power', label: '动力中心' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="scope" label="碳排放范围" initialValue="scope2">
+            <Select options={[
+              { value: 'scope1', label: '范围一(直接排放)' },
+              { value: 'scope2', label: '范围二(间接排放)' },
+              { value: 'scope3', label: '范围三(其他)' },
+            ]} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/DataCollection/index.tsx
+// 说明: 手动数据采集页面
+// ===========================================================
+
+import { useState } from 'react'
+import { Card, Form, Select, DatePicker, InputNumber, Button, message, Row, Col, Divider } from 'antd'
+import api from '../../services/api'
+import dayjs from 'dayjs'
+
+export default function DataCollection() {
+  const [loading, setLoading] = useState(false)
+  const [form] = Form.useForm()
+
+  const handleSubmit = async (values: any) => {
+    setLoading(true)
+    try {
+      const res: any = await api.post('/data/manual-input', {
+        deviceId: values.deviceId,
+        energyType: values.energyType,
+        timestamp: values.timestamp?.toISOString(),
+        readings: values.readings,
+      })
+      if (res.code === 0) {
+        message.success('数据录入成功')
+        form.resetFields()
+      }
+    } catch { message.error('录入失败') }
+    setLoading(false)
+  }
+
+  return (
+    <Card title="手动数据采集">
+      <Form form={form} layout="vertical" onFinish={handleSubmit} style={{ maxWidth: 800 }}>
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item name="deviceId" label="设备" rules={[{ required: true }]}>
+              <Select placeholder="选择设备" options={[
+                { value: 'EM-001', label: 'EM-001 1#车间总电表' },
+                { value: 'EM-002', label: 'EM-002 2#车间总电表' },
+                { value: 'GM-001', label: 'GM-001 1#车间燃气表' },
+                { value: 'WM-001', label: 'WM-001 总水表' },
+                { value: 'SM-001', label: 'SM-001 蒸汽表' },
+              ]} />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name="energyType" label="能源类型" rules={[{ required: true }]}>
+              <Select options={[
+                { value: 'electricity', label: '电力' }, { value: 'gas', label: '天然气' },
+                { value: 'water', label: '水' }, { value: 'steam', label: '蒸汽' },
+              ]} />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name="timestamp" label="采集时间" initialValue={dayjs()}>
+              <DatePicker showTime style={{ width: '100%' }} />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Divider>仪表读数</Divider>
+
+        <Row gutter={16}>
+          <Col span={8}>
+            <Form.Item name={['readings', 'total_energy']} label="累计读数">
+              <InputNumber style={{ width: '100%' }} placeholder="kWh / m³ / t" />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name={['readings', 'active_power']} label="瞬时功率/流量">
+              <InputNumber style={{ width: '100%' }} placeholder="kW / m³/h / t/h" />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
+            <Form.Item name={['readings', 'voltage']} label="电压/压力">
+              <InputNumber style={{ width: '100%' }} placeholder="V / MPa" />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Form.Item>
+          <Button type="primary" htmlType="submit" loading={loading}>提交数据</Button>
+        </Form.Item>
+      </Form>
+    </Card>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/AlarmCenter/index.tsx
+// 说明: 告警中心页面
+// ===========================================================
+
+import { useEffect, useState } from 'react'
+import { Card, Table, Tag, Button, Space, Select, message, Modal, Input } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
+import api from '../../services/api'
+import type { AlarmRecord } from '../../types'
+
+const severityMap: Record<string, { color: string; text: string }> = {
+  critical: { color: 'red', text: '严重' },
+  warning: { color: 'orange', text: '警告' },
+  info: { color: 'blue', text: '信息' },
+}
+
+const statusMap: Record<string, { color: string; text: string }> = {
+  active: { color: 'red', text: '活跃' },
+  acknowledged: { color: 'orange', text: '已确认' },
+  resolved: { color: 'green', text: '已解除' },
+}
+
+export default function AlarmCenter() {
+  const [alarms, setAlarms] = useState<AlarmRecord[]>([])
+  const [loading, setLoading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string>('')
+
+  useEffect(() => { loadAlarms() }, [statusFilter])
+
+  const loadAlarms = async () => {
+    setLoading(true)
+    try {
+      const params: any = {}
+      if (statusFilter) params.status = statusFilter
+      const res: any = await api.get('/alarms', { params })
+      if (res.code === 0) setAlarms(res.data)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  const handleAcknowledge = (id: string) => {
+    Modal.confirm({
+      title: '确认告警',
+      content: <Input.TextArea placeholder="备注信息（可选）" />,
+      onOk: async () => {
+        await api.put(`/alarms/${id}/acknowledge`, { note: '' })
+        message.success('已确认')
+        loadAlarms()
+      },
+    })
+  }
+
+  const handleResolve = (id: string) => {
+    Modal.confirm({
+      title: '解除告警',
+      content: <Input.TextArea placeholder="解除原因" />,
+      onOk: async () => {
+        await api.put(`/alarms/${id}/resolve`, { note: '' })
+        message.success('已解除')
+        loadAlarms()
+      },
+    })
+  }
+
+  const columns = [
+    { title: '标题', dataIndex: 'title', key: 'title' },
+    { title: '类别', dataIndex: 'category', key: 'category' },
+    {
+      title: '严重程度', dataIndex: 'severity', key: 'severity',
+      render: (s: string) => <Tag color={severityMap[s]?.color}>{severityMap[s]?.text}</Tag>,
+    },
+    {
+      title: '状态', dataIndex: 'status', key: 'status',
+      render: (s: string) => <Tag color={statusMap[s]?.color}>{statusMap[s]?.text}</Tag>,
+    },
+    { title: '当前值', dataIndex: 'current_value', key: 'current_value', render: (v: number) => v?.toFixed(2) || '--' },
+    { title: '时间', dataIndex: 'created_at', key: 'created_at' },
+    {
+      title: '操作', key: 'action',
+      render: (_: any, r: AlarmRecord) => (
+        <Space>
+          {r.status === 'active' && <Button size="small" onClick={() => handleAcknowledge(r.id)}>确认</Button>}
+          {r.status !== 'resolved' && <Button size="small" type="primary" onClick={() => handleResolve(r.id)}>解除</Button>}
+        </Space>
+      ),
+    },
+  ]
+
+  return (
+    <Card
+      title="告警中心"
+      extra={
+        <Space>
+          <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 120 }} allowClear placeholder="状态筛选"
+            options={[
+              { value: 'active', label: '活跃' },
+              { value: 'acknowledged', label: '已确认' },
+              { value: 'resolved', label: '已解除' },
+            ]}
+          />
+          <Button icon={<ReloadOutlined />} onClick={loadAlarms}>刷新</Button>
+        </Space>
+      }
+    >
+      <Table dataSource={alarms} columns={columns} rowKey="id" loading={loading} />
+    </Card>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/ReportCenter/index.tsx
+// 说明: 报表中心页面
+// ===========================================================
+
+import { useState } from 'react'
+import { Card, Form, Select, DatePicker, Button, Table, Tag, message, Row, Col, Statistic, Space, Progress, Descriptions } from 'antd'
+import { FileExcelOutlined, FilePdfOutlined, DownloadOutlined, PlusOutlined, EyeOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
+
+const { RangePicker } = DatePicker
+
+interface ReportRecord {
+  id: string
+  title: string
+  type: string
+  period_start: string
+  period_end: string
+  status: string
+  file_format: string
+  file_size?: number
+  generated_by?: string
+  created_at: string
+}
+
+export default function ReportCenter() {
+  const [generating, setGenerating] = useState(false)
+  const [previewVisible, setPreviewVisible] = useState(false)
+  const [selectedReport, setSelectedReport] = useState<ReportRecord | null>(null)
+  const [reports] = useState<ReportRecord[]>([
+    { id: '1', title: '2026年3月碳排放月报', type: 'monthly', period_start: '2026-03-01', period_end: '2026-03-31', status: 'completed', file_format: 'xlsx', file_size: 256000, generated_by: 'admin', created_at: '2026-04-01 08:30:00' },
+    { id: '2', title: '2026年Q1碳排放季报', type: 'quarterly', period_start: '2026-01-01', period_end: '2026-03-31', status: 'completed', file_format: 'pdf', file_size: 1280000, generated_by: 'admin', created_at: '2026-04-02 09:15:00' },
+    { id: '3', title: '2026年2月碳排放月报', type: 'monthly', period_start: '2026-02-01', period_end: '2026-02-28', status: 'completed', file_format: 'xlsx', file_size: 248000, generated_by: 'admin', created_at: '2026-03-01 08:00:00' },
+    { id: '4', title: '2026年1月碳排放月报', type: 'monthly', period_start: '2026-01-01', period_end: '2026-01-31', status: 'completed', file_format: 'xlsx', file_size: 262000, generated_by: 'admin', created_at: '2026-02-01 08:00:00' },
+    { id: '5', title: '2025年度碳排放年报', type: 'annual', period_start: '2025-01-01', period_end: '2025-12-31', status: 'completed', file_format: 'pdf', file_size: 3500000, generated_by: 'admin', created_at: '2026-01-15 10:00:00' },
+  ])
+
+  const typeMap: Record<string, string> = { monthly: '月报', quarterly: '季报', annual: '年报', custom: '自定义' }
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '--'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    setTimeout(() => {
+      setGenerating(false)
+      message.success('报表生成完成')
+    }, 2000)
+  }
+
+  const handlePreview = (record: ReportRecord) => {
+    setSelectedReport(record)
+    setPreviewVisible(true)
+  }
+
+  const columns = [
+    { title: '报告标题', dataIndex: 'title', key: 'title', width: 250 },
+    { title: '类型', dataIndex: 'type', key: 'type', width: 80, render: (t: string) => <Tag>{typeMap[t] || t}</Tag> },
+    { title: '报告周期', key: 'period', width: 200, render: (_: any, r: ReportRecord) => `${r.period_start} ~ ${r.period_end}` },
+    {
+      title: '状态', dataIndex: 'status', key: 'status', width: 100,
+      render: (s: string) => <Tag color={s === 'completed' ? 'green' : s === 'generating' ? 'orange' : 'red'}>
+        {s === 'completed' ? '已完成' : s === 'generating' ? '生成中' : '失败'}
+      </Tag>,
+    },
+    {
+      title: '格式', dataIndex: 'file_format', key: 'file_format', width: 100,
+      render: (f: string) => f === 'xlsx'
+        ? <Tag icon={<FileExcelOutlined />} color="green">Excel</Tag>
+        : <Tag icon={<FilePdfOutlined />} color="red">PDF</Tag>,
+    },
+    { title: '大小', dataIndex: 'file_size', key: 'file_size', width: 100, render: formatFileSize },
+    { title: '生成者', dataIndex: 'generated_by', key: 'generated_by', width: 80 },
+    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 160 },
+    {
+      title: '操作', key: 'action', width: 150,
+      render: (_: any, record: ReportRecord) => (
+        <Space>
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handlePreview(record)}>预览</Button>
+          <Button type="link" size="small" icon={<DownloadOutlined />}>下载</Button>
+        </Space>
+      ),
+    },
+  ]
+
+  // 报表汇总统计
+  const completedCount = reports.filter(r => r.status === 'completed').length
+  const monthlyCount = reports.filter(r => r.type === 'monthly').length
+
+  return (
+    <div>
+      {/* 统计卡片 */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={8}>
+          <Card><Statistic title="报表总数" value={reports.length} suffix="份" /></Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card><Statistic title="已完成" value={completedCount} suffix="份" valueStyle={{ color: '#3f8600' }} /></Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card><Statistic title="月报数量" value={monthlyCount} suffix="份" /></Card>
+        </Col>
+      </Row>
+
+      {/* 生成新报表 */}
+      <Card title="生成新报表" style={{ marginBottom: 16 }} extra={<Button type="primary" icon={<PlusOutlined />} loading={generating} onClick={handleGenerate}>立即生成</Button>}>
+        <Form layout="inline">
+          <Form.Item label="报表类型" name="type" initialValue="monthly">
+            <Select style={{ width: 120 }}
+              options={[{ value: 'monthly', label: '月报' }, { value: 'quarterly', label: '季报' }, { value: 'annual', label: '年报' }]} />
+          </Form.Item>
+          <Form.Item label="时间范围" name="dateRange" initialValue={[dayjs().startOf('month'), dayjs().endOf('month')]}>
+            <RangePicker />
+          </Form.Item>
+          <Form.Item label="范围" name="scope" initialValue="all">
+            <Select style={{ width: 120 }} options={[{ value: 'all', label: '全部范围' }, { value: 'scope1', label: '范围一' }, { value: 'scope2', label: '范围二' }]} />
+          </Form.Item>
+          <Form.Item label="格式" name="format" initialValue="xlsx">
+            <Select style={{ width: 100 }} options={[{ value: 'xlsx', label: 'Excel' }, { value: 'pdf', label: 'PDF' }]} />
+          </Form.Item>
+        </Form>
+      </Card>
+
+      {/* 报表列表 */}
+      <Card title="历史报表">
+        <Table dataSource={reports} columns={columns} rowKey="id" pagination={{ pageSize: 10 }} />
+      </Card>
+
+      {/* 报表预览抽屉 — 简化版用Descriptions展示 */}
+      {previewVisible && selectedReport && (
+        <Card title={`报表预览: ${selectedReport.title}`} style={{ marginTop: 16 }}
+          extra={<Button onClick={() => setPreviewVisible(false)}>关闭</Button>}>
+          <Descriptions bordered column={2}>
+            <Descriptions.Item label="报表名称">{selectedReport.title}</Descriptions.Item>
+            <Descriptions.Item label="类型">{typeMap[selectedReport.type]}</Descriptions.Item>
+            <Descriptions.Item label="报告周期">{selectedReport.period_start} ~ {selectedReport.period_end}</Descriptions.Item>
+            <Descriptions.Item label="格式">{selectedReport.file_format.toUpperCase()}</Descriptions.Item>
+            <Descriptions.Item label="文件大小">{formatFileSize(selectedReport.file_size)}</Descriptions.Item>
+            <Descriptions.Item label="生成时间">{selectedReport.created_at}</Descriptions.Item>
+          </Descriptions>
+          <Card title="报表摘要" style={{ marginTop: 16 }} type="inner">
+            <Row gutter={16}>
+              <Col span={6}><Statistic title="总碳排放" value={320.5} suffix="tCO₂e" /></Col>
+              <Col span={6}><Statistic title="配额使用" value={71.2} suffix="%" /></Col>
+              <Col span={6}><Statistic title="环比变化" value={-3.2} suffix="%" prefix={<Tag color="green">下降</Tag>} /></Col>
+              <Col span={6}>
+                <div>配额进度</div>
+                <Progress percent={71.2} status="active" strokeColor="#5470c6" />
+              </Col>
+            </Row>
+          </Card>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/EmissionFactors/index.tsx
+// 说明: 排放因子库页面
+// ===========================================================
+
+import { useEffect, useState } from 'react'
+import { Card, Table, Tag, Button, Space, Modal, Form, Input, Select, InputNumber, message } from 'antd'
+import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import api from '../../services/api'
+import type { EmissionFactor } from '../../types'
+
+const energyTypeMap: Record<string, string> = {
+  electricity: '电力', gas: '天然气', water: '水', steam: '蒸汽', diesel: '柴油', coal: '煤炭',
+}
+
+export default function EmissionFactors() {
+  const [factors, setFactors] = useState<EmissionFactor[]>([])
+  const [loading, setLoading] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form] = Form.useForm()
+
+  useEffect(() => { loadFactors() }, [])
+
+  const loadFactors = async () => {
+    setLoading(true)
+    try {
+      const res: any = await api.get('/emission-factors')
+      if (res.code === 0) setFactors(res.data)
+    } catch { /* ignore */ }
+    setLoading(false)
+  }
+
+  const handleCreate = async (values: any) => {
+    try {
+      const res: any = await api.post('/emission-factors', values)
+      if (res.code === 0) { message.success('创建成功'); setModalOpen(false); form.resetFields(); loadFactors() }
+    } catch { message.error('创建失败') }
+  }
+
+  const columns = [
+    { title: '名称', dataIndex: 'name', key: 'name' },
+    { title: '能源类型', dataIndex: 'energy_type', key: 'energy_type', render: (t: string) => energyTypeMap[t] || t },
+    { title: '排放因子', dataIndex: 'factor_value', key: 'factor_value', render: (v: number) => v?.toFixed(6) },
+    { title: '单位', dataIndex: 'factor_unit', key: 'factor_unit' },
+    { title: '范围', dataIndex: 'scope', key: 'scope', render: (s: string) => <Tag color="blue">{s}</Tag> },
+    { title: '区域', dataIndex: 'region', key: 'region' },
+    { title: '来源', dataIndex: 'source', key: 'source' },
+    { title: '年份', dataIndex: 'valid_year', key: 'valid_year' },
+    { title: '默认', dataIndex: 'is_default', key: 'is_default', render: (v: number) => v ? <Tag color="green">默认</Tag> : null },
+  ]
+
+  return (
+    <Card
+      title="排放因子库"
+      extra={
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={loadFactors}>刷新</Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>添加</Button>
+        </Space>
+      }
+    >
+      <Table dataSource={factors} columns={columns} rowKey="id" loading={loading} pagination={false} />
+
+      <Modal title="添加排放因子" open={modalOpen} onCancel={() => setModalOpen(false)} onOk={() => form.submit()} width={600}>
+        <Form form={form} layout="vertical" onFinish={handleCreate}>
+          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="energy_type" label="能源类型" rules={[{ required: true }]}>
+            <Select options={Object.entries(energyTypeMap).map(([v, l]) => ({ value: v, label: l }))} />
+          </Form.Item>
+          <Form.Item name="factor_value" label="排放因子值" rules={[{ required: true }]}><InputNumber style={{ width: '100%' }} step={0.000001} /></Form.Item>
+          <Form.Item name="factor_unit" label="因子单位" rules={[{ required: true }]}><Input placeholder="如: tCO2e/kWh" /></Form.Item>
+          <Form.Item name="source_unit" label="源单位" rules={[{ required: true }]}><Input placeholder="如: kWh" /></Form.Item>
+          <Form.Item name="scope" label="范围" rules={[{ required: true }]}>
+            <Select options={[{ value: 'scope1', label: '范围一' }, { value: 'scope2', label: '范围二' }, { value: 'scope3', label: '范围三' }]} />
+          </Form.Item>
+          <Form.Item name="region" label="适用区域"><Input placeholder="如: 华东电网" /></Form.Item>
+          <Form.Item name="source" label="数据来源"><Input placeholder="如: 生态环境部2023年度" /></Form.Item>
+          <Form.Item name="valid_year" label="有效年份"><InputNumber style={{ width: '100%' }} /></Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  )
+}
+
+
+// ===========================================================
+// 文件: frontend/src/pages/SystemSettings/index.tsx
+// 说明: 系统设置页面
+// ===========================================================
+
+import { useEffect, useState } from 'react'
+import { Card, Tabs, Table, Button, Form, Input, message, Tag, Modal } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
+import api from '../../services/api'
+import type { Area } from '../../types'
+
+export default function SystemSettings() {
+  const [areas, setAreas] = useState<Area[]>([])
+  const [, setConfig] = useState<Record<string, string>>({})
+  const [areaModalOpen, setAreaModalOpen] = useState(false)
+  const [areaForm] = Form.useForm()
+  const [configForm] = Form.useForm()
+
+  useEffect(() => { loadAreas(); loadConfig() }, [])
+
+  const loadAreas = async () => {
+    try {
+      const res: any = await api.get('/system/areas')
+      if (res.code === 0) setAreas(res.data)
+    } catch { /* ignore */ }
+  }
+
+  const loadConfig = async () => {
+    try {
+      const res: any = await api.get('/system/config')
+      if (res.code === 0) { setConfig(res.data); configForm.setFieldsValue(res.data) }
+    } catch { /* ignore */ }
+  }
+
+  const handleCreateArea = async (values: any) => {
+    try {
+      const res: any = await api.post('/system/areas', values)
+      if (res.code === 0) { message.success('区域创建成功'); setAreaModalOpen(false); areaForm.resetFields(); loadAreas() }
+    } catch { message.error('创建失败') }
+  }
+
+  const handleUpdateConfig = async (values: any) => {
+    try {
+      await api.put('/system/config', values)
+      message.success('配置已更新')
+    } catch { message.error('更新失败') }
+  }
+
+  const areaColumns = [
+    { title: 'ID', dataIndex: 'id', key: 'id' },
+    { title: '名称', dataIndex: 'name', key: 'name' },
+    { title: '类型', dataIndex: 'type', key: 'type', render: (t: string) => <Tag>{t}</Tag> },
+    { title: '描述', dataIndex: 'description', key: 'description' },
+    { title: '排序', dataIndex: 'sort_order', key: 'sort_order' },
+  ]
+
+  const tabItems = [
+    {
+      key: 'areas',
+      label: '区域管理',
+      children: (
+        <Card extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setAreaModalOpen(true)}>添加区域</Button>}>
+          <Table dataSource={areas} columns={areaColumns} rowKey="id" pagination={false} />
+        </Card>
+      ),
+    },
+    {
+      key: 'config',
+      label: '系统配置',
+      children: (
+        <Card>
+          <Form form={configForm} layout="vertical" onFinish={handleUpdateConfig} style={{ maxWidth: 500 }}>
+            <Form.Item name="company_name" label="企业名称"><Input /></Form.Item>
+            <Form.Item name="carbon_calc_interval" label="碳排放计算间隔(秒)"><Input /></Form.Item>
+            <Form.Item name="data_simulator_enabled" label="数据模拟器"><Input /></Form.Item>
+            <Form.Item><Button type="primary" htmlType="submit">保存配置</Button></Form.Item>
+          </Form>
+        </Card>
+      ),
+    },
+  ]
+
+  return (
+    <div>
+      <Tabs items={tabItems} />
+      <Modal title="添加区域" open={areaModalOpen} onCancel={() => setAreaModalOpen(false)} onOk={() => areaForm.submit()}>
+        <Form form={areaForm} layout="vertical" onFinish={handleCreateArea}>
+          <Form.Item name="name" label="区域名称" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="type" label="类型" initialValue="production"><Input /></Form.Item>
+          <Form.Item name="description" label="描述"><Input.TextArea /></Form.Item>
+        </Form>
+      </Modal>
+    </div>
+  )
+}
+
