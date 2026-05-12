@@ -30,6 +30,13 @@
   display: grid; place-items: center;
   color: #0b1220; font-weight: 700;
 }
+.iecsp-side__brand .mark-img {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  background: #fff;
+  padding: 2px;
+  object-fit: contain;
+}
 .iecsp-side__brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
 .iecsp-side__brand small { color: var(--fg-muted); font-size: 11px; }
 

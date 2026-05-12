@@ -5,7 +5,7 @@
   1. 前端源代码.txt   —— 把 web/ 下的源码拼接成一个文本文件
   2. 后端源代码.txt   —— 把 server/src + prisma schema/seed 拼接
   3. 采集表.xlsx      —— 源代码采集表
-  4. 双碳实时数据采集系统操作手册.docx  —— 把 docs/操作手册.md 转 Word
+  4. 本安双碳实时数据采集系统操作手册.docx  —— 把 docs/操作手册.md 转 Word
 
 直接 python3 scripts/build_release.py 运行即可。
 输出到项目根目录。
@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import date
 
 ROOT = Path(__file__).resolve().parent.parent
-SYSTEM_NAME = "双碳实时数据采集系统"
+SYSTEM_NAME = "本安双碳实时数据采集系统"
 VERSION = "V2.0"
 AUTHOR_NOTE = ""  # 留空，软著登记表里手工填
 
@@ -426,12 +426,12 @@ def main():
     write_xlsx(fe_total, be_total, fe_stats, be_stats, ROOT / "采集表.xlsx")
     print("  done")
 
-    print("\n[4/4] 生成 双碳实时数据采集系统操作手册.docx ...")
-    md_to_docx(ROOT / "docs" / "操作手册.md", ROOT / "双碳实时数据采集系统操作手册.docx")
+    print("\n[4/4] 生成 本安双碳实时数据采集系统操作手册.docx ...")
+    md_to_docx(ROOT / "docs" / "操作手册.md", ROOT / "本安双碳实时数据采集系统操作手册.docx")
     print("  done")
 
     print("\n全部完成。输出文件位于：")
-    for f in ["前端源代码.txt", "后端源代码.txt", "采集表.xlsx", "双碳实时数据采集系统操作手册.docx"]:
+    for f in ["前端源代码.txt", "后端源代码.txt", "采集表.xlsx", "本安双碳实时数据采集系统操作手册.docx"]:
         p = ROOT / f
         print(f"  {p}  ({p.stat().st_size} bytes)")
 

@@ -17,7 +17,7 @@ export function start(hostSelector) {
     if (current && current.dispose) {
       try { current.dispose(); } catch (e) { console.warn('dispose error', e); }
     }
-    document.title = (route.title || '首页') + ' - 双碳实时数据采集系统';
+    document.title = (route.title || '首页') + ' - 本安双碳实时数据采集系统';
     host.innerHTML = '<div style="padding:48px 0;text-align:center;color:var(--fg-dim)"><span class="iecsp-loading"></span>&nbsp;&nbsp;载入中…</div>';
     try {
       const mod = await route.loader();

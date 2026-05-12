@@ -6,9 +6,9 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>双碳实时数据采集系统</title>
+  <title>本安双碳实时数据采集系统</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
+  <link rel="icon" type="image/png" href="/assets/icons/logo.png" />
   <link rel="stylesheet" href="/assets/css/reset.css" />
   <link rel="stylesheet" href="/assets/css/tokens.css" />
   <link rel="stylesheet" href="/assets/css/layout.css" />
@@ -18,9 +18,9 @@
   <div class="iecsp-shell">
     <aside class="iecsp-side">
       <div class="iecsp-side__brand">
-        <span class="mark">碳</span>
+        <img class="mark-img" src="/assets/icons/logo.png" alt="本安" />
         <div>
-          <h1>双碳数据采集</h1>
+          <h1>本安双碳采集</h1>
           <small>v2.0</small>
         </div>
       </div>
@@ -63,9 +63,9 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>登录 - 双碳实时数据采集系统</title>
+  <title>登录 - 本安双碳实时数据采集系统</title>
   <meta name="theme-color" content="#0b1220" />
-  <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
+  <link rel="icon" type="image/png" href="/assets/icons/logo.png" />
   <link rel="stylesheet" href="/assets/css/reset.css" />
   <link rel="stylesheet" href="/assets/css/tokens.css" />
   <link rel="stylesheet" href="/assets/css/components.css" />
@@ -75,9 +75,9 @@
   <main class="login-stage">
     <section class="login-stage__hero" aria-hidden="true">
       <header class="login-hero__brand">
-        <span class="mark">碳</span>
+        <img class="mark-img" src="/assets/icons/logo.png" alt="本安" />
         <div>
-          <h1>双碳实时数据采集系统</h1>
+          <h1>本安双碳实时数据采集系统</h1>
           <small>v2.0</small>
         </div>
       </header>
@@ -133,7 +133,7 @@
           <div>查看 <code>observer</code> / <code>Observer@2026</code></div>
         </aside>
 
-        <p class="login-foot">双碳实时数据采集系统 v2.0</p>
+        <p class="login-foot">本安双碳实时数据采集系统 v2.0</p>
       </form>
     </section>
   </main>
@@ -291,6 +291,13 @@ table { border-collapse: collapse; width: 100%; }
   background: linear-gradient(135deg, var(--primary), var(--accent));
   display: grid; place-items: center;
   color: #0b1220; font-weight: 700;
+}
+.iecsp-side__brand .mark-img {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  background: #fff;
+  padding: 2px;
+  object-fit: contain;
 }
 .iecsp-side__brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
 .iecsp-side__brand small { color: var(--fg-muted); font-size: 11px; }
@@ -627,6 +634,13 @@ table { border-collapse: collapse; width: 100%; }
   color: #0b1220; font-weight: 800;
   font-size: 18px;
 }
+.login-hero__brand .mark-img {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: #fff;
+  padding: 3px;
+  object-fit: contain;
+}
 .login-hero__brand h1 { font-size: 16px; font-weight: 600; }
 .login-hero__brand small { color: var(--fg-muted); font-size: 12px; }
 
@@ -928,7 +942,7 @@ export function start(hostSelector) {
     if (current && current.dispose) {
       try { current.dispose(); } catch (e) { console.warn('dispose error', e); }
     }
-    document.title = (route.title || '首页') + ' - 双碳实时数据采集系统';
+    document.title = (route.title || '首页') + ' - 本安双碳实时数据采集系统';
     host.innerHTML = '<div style="padding:48px 0;text-align:center;color:var(--fg-dim)"><span class="iecsp-loading"></span>&nbsp;&nbsp;载入中…</div>';
     try {
       const mod = await route.loader();

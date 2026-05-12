@@ -29,6 +29,13 @@
   color: #0b1220; font-weight: 800;
   font-size: 18px;
 }
+.login-hero__brand .mark-img {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: #fff;
+  padding: 3px;
+  object-fit: contain;
+}
 .login-hero__brand h1 { font-size: 16px; font-weight: 600; }
 .login-hero__brand small { color: var(--fg-muted); font-size: 12px; }
 

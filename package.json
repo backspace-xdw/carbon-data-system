@@ -2,7 +2,7 @@
   "name": "carbon-realtime-system",
   "version": "2.0.0",
   "private": true,
-  "description": "双碳实时数据采集系统",
+  "description": "本安双碳实时数据采集系统",
   "workspaces": [
     "server"
   ],
