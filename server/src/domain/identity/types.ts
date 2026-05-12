@@ -1,10 +1,10 @@
 export type Role = 'platform_admin' | 'park_admin' | 'data_steward' | 'observer';
 
 export const ROLE_LABEL: Record<Role, string> = {
-  platform_admin: '平台管理员',
-  park_admin: '园区管理员',
+  platform_admin: '系统管理员',
+  park_admin: '单位管理员',
   data_steward: '数据员',
-  observer: '观察员'
+  observer: '查看人员'
 };
 
 export const ROLE_RANK: Record<Role, number> = {

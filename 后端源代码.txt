@@ -1,0 +1,1753 @@
+/* ========== 文件: server/src/main.ts ========== */
+
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import staticPlugin from '@fastify/static';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import { env } from './config/env.js';
+import { logger } from './infrastructure/logging/logger.js';
+import { prisma } from './infrastructure/persistence/prisma.js';
+import { tsdb } from './infrastructure/timeseries/influx.js';
+import { mqttBus } from './infrastructure/messaging/mqtt.js';
+import { registerAuth } from './interface/plugins/auth-plugin.js';
+import { authRoutes } from './interface/http/auth-routes.js';
+import { cockpitRoutes } from './interface/http/cockpit-routes.js';
+import { meterRoutes } from './interface/http/meter-routes.js';
+import { energyRoutes } from './interface/http/energy-routes.js';
+import { carbonRoutes } from './interface/http/carbon-routes.js';
+import { quotaRoutes } from './interface/http/quota-routes.js';
+import { riskRoutes } from './interface/http/risk-routes.js';
+import { reportRoutes } from './interface/http/report-routes.js';
+import { accountRoutes } from './interface/http/account-routes.js';
+import { registerRealtime, broadcastMeterTick } from './interface/ws/realtime.js';
+import { energyService } from './application/energy/energy-service.js';
+import { riskService } from './application/risk/risk-service.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+async function bootstrap() {
+  const app = Fastify({ logger: false, trustProxy: true, bodyLimit: 1 << 20 });
+
+  app.setErrorHandler((err, req, reply) => {
+    logger.error({ err: err.message, url: req.url, stack: err.stack }, 'unhandled');
+    reply.code(err.statusCode || 500).send({ ok: false, message: err.message || '服务异常' });
+  });
+
+  await app.register(cors, { origin: true });
+  await registerAuth(app);
+
+  // 业务路由
+  await app.register(authRoutes,    { prefix: '/api/v1/auth' });
+  await app.register(cockpitRoutes, { prefix: '/api/v1/cockpit' });
+  await app.register(meterRoutes,   { prefix: '/api/v1/meters' });
+  await app.register(energyRoutes,  { prefix: '/api/v1/energy' });
+  await app.register(carbonRoutes,  { prefix: '/api/v1/carbon' });
+  await app.register(quotaRoutes,   { prefix: '/api/v1/quota' });
+  await app.register(riskRoutes,    { prefix: '/api/v1/risk' });
+  await app.register(reportRoutes,  { prefix: '/api/v1/report' });
+  await app.register(accountRoutes, { prefix: '/api/v1/account' });
+
+  // 健康检查
+  app.get('/api/v1/health', async () => ({ ok: true, ts: Date.now(), version: '2.0.0' }));
+
+  // WebSocket
+  await registerRealtime(app);
+
+  // 静态前端
+  const webRoot = path.resolve(__dirname, '..', '..', 'web');
+  if (fs.existsSync(webRoot)) {
+    await app.register(staticPlugin, { root: webRoot, prefix: '/', decorateReply: false });
+    // SPA 兜底:非 /api 与非已知静态资源,fallback 到 index.html
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith('/api') || req.url.startsWith('/ws')) {
+        return reply.code(404).send({ ok: false, message: 'not found' });
+      }
+      reply.type('text/html').sendFile('index.html', webRoot);
+    });
+  } else {
+    logger.warn({ webRoot }, 'web root not found, static disabled');
+  }
+
+  // MQTT -> 时序写入 + 风险评估 + WS 推送
+  mqttBus.on(async (msg) => {
+    const r = await energyService.ingest({ meterCode: msg.meter, value: msg.value, ts: msg.ts });
+    if (r) {
+      broadcastMeterTick(r.meter, r.value);
+      riskService.evaluate(r.meter, r.value).catch(() => undefined);
+    }
+  });
+  mqttBus.start();
+
+  await app.listen({ host: env.HOST, port: env.PORT });
+  logger.info({ host: env.HOST, port: env.PORT }, 'carbon-server listening');
+
+  const shutdown = async (sig: string) => {
+    logger.info({ sig }, 'shutting down');
+    try { await app.close(); } catch {}
+    try { await tsdb.flush(); await tsdb.close(); } catch {}
+    try { await mqttBus.stop(); } catch {}
+    try { await prisma.$disconnect(); } catch {}
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
+
+bootstrap().catch((e) => {
+  logger.error({ err: e instanceof Error ? e.message : String(e) }, 'bootstrap failed');
+  process.exit(1);
+});
+
+
+/* ========== 文件: server/src/config/env.ts ========== */
+
+import { z } from 'zod';
+
+const schema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.coerce.number().int().positive().default(7090),
+  HOST: z.string().default('0.0.0.0'),
+
+  JWT_SECRET: z.string().min(16).default('carbon-dev-secret-change-me-please'),
+  JWT_TTL: z.string().default('7d'),
+
+  DATABASE_URL: z.string().default('file:./prisma/dev.db'),
+
+  INFLUX_URL: z.string().url().default('http://localhost:8086'),
+  INFLUX_TOKEN: z.string().default('carbon-token-2026'),
+  INFLUX_ORG: z.string().default('carbon-rt'),
+  INFLUX_BUCKET_REALTIME: z.string().default('energy_stream'),
+  INFLUX_BUCKET_AGG: z.string().default('energy_agg'),
+
+  MQTT_URL: z.string().default('mqtt://localhost:1883'),
+  MQTT_TOPIC_PREFIX: z.string().default('carbon/meter'),
+
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  WEB_ROOT: z.string().default('../web')
+});
+
+export const env = schema.parse(process.env);
+export type Env = z.infer<typeof schema>;
+
+
+/* ========== 文件: server/src/infrastructure/logging/logger.ts ========== */
+
+import pino from 'pino';
+import { env } from '../../config/env.js';
+
+const transport = env.NODE_ENV === 'production'
+  ? undefined
+  : { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:HH:MM:ss' } };
+
+export const logger = pino({
+  level: env.LOG_LEVEL,
+  base: { app: 'carbon-server' },
+  transport
+});
+
+
+/* ========== 文件: server/src/infrastructure/persistence/prisma.ts ========== */
+
+import { PrismaClient } from '@prisma/client';
+import { logger } from '../logging/logger.js';
+
+export const prisma = new PrismaClient({
+  log: [
+    { emit: 'event', level: 'error' },
+    { emit: 'event', level: 'warn' }
+  ]
+});
+
+prisma.$on('error', (e) => logger.error({ event: e }, 'prisma error'));
+prisma.$on('warn', (e) => logger.warn({ event: e }, 'prisma warn'));
+
+
+/* ========== 文件: server/src/infrastructure/timeseries/influx.ts ========== */
+
+import { InfluxDB, Point, WriteApi, QueryApi } from '@influxdata/influxdb-client';
+import { env } from '../../config/env.js';
+import { logger } from '../logging/logger.js';
+
+class TimeseriesGateway {
+  private client: InfluxDB;
+  private writeApi: WriteApi;
+  private queryApi: QueryApi;
+  private degraded = false;
+
+  constructor() {
+    this.client = new InfluxDB({ url: env.INFLUX_URL, token: env.INFLUX_TOKEN, timeout: 5000 });
+    this.writeApi = this.client.getWriteApi(env.INFLUX_ORG, env.INFLUX_BUCKET_REALTIME, 'ms', {
+      flushInterval: 2000,
+      batchSize: 200,
+      writeFailed: (err) => {
+        if (!this.degraded) {
+          this.degraded = true;
+          logger.warn({ err: err.message }, 'influx write degraded, will keep retrying');
+        }
+      },
+      writeSuccess: () => {
+        if (this.degraded) {
+          this.degraded = false;
+          logger.info('influx write recovered');
+        }
+      }
+    });
+    this.queryApi = this.client.getQueryApi(env.INFLUX_ORG);
+  }
+
+  writeReading(meterCode: string, energyType: string, value: number, tsMs?: number) {
+    const point = new Point('energy_reading')
+      .tag('meter', meterCode)
+      .tag('type', energyType)
+      .floatField('value', value);
+    if (tsMs) point.timestamp(tsMs);
+    this.writeApi.writePoint(point);
+  }
+
+  async flush() {
+    try { await this.writeApi.flush(); } catch (e) { /* swallow, gateway is best-effort */ }
+  }
+
+  async close() {
+    try { await this.writeApi.close(); } catch { /* noop */ }
+  }
+
+  async rangeByMeter(meterCode: string, start: string, stop: string, every: string) {
+    const flux = `from(bucket: "${env.INFLUX_BUCKET_REALTIME}")
+      |> range(start: ${start}, stop: ${stop})
+      |> filter(fn: (r) => r._measurement == "energy_reading" and r.meter == "${meterCode}")
+      |> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)
+      |> yield(name: "mean")`;
+    const rows: Array<{ time: string; value: number }> = [];
+    try {
+      for await (const { values, tableMeta } of this.queryApi.iterateRows(flux)) {
+        const o = tableMeta.toObject(values) as any;
+        rows.push({ time: o._time, value: o._value });
+      }
+    } catch (e) {
+      logger.warn({ err: (e as Error).message }, 'influx query failed, returning empty');
+    }
+    return rows;
+  }
+
+  async sumByType(start: string, stop: string) {
+    const flux = `from(bucket: "${env.INFLUX_BUCKET_REALTIME}")
+      |> range(start: ${start}, stop: ${stop})
+      |> filter(fn: (r) => r._measurement == "energy_reading")
+      |> group(columns: ["type"])
+      |> sum(column: "_value")
+      |> yield(name: "sum")`;
+    const out: Record<string, number> = {};
+    try {
+      for await (const { values, tableMeta } of this.queryApi.iterateRows(flux)) {
+        const o = tableMeta.toObject(values) as any;
+        out[o.type] = o._value || 0;
+      }
+    } catch (e) {
+      logger.warn({ err: (e as Error).message }, 'influx sum failed');
+    }
+    return out;
+  }
+}
+
+export const tsdb = new TimeseriesGateway();
+
+
+/* ========== 文件: server/src/infrastructure/messaging/mqtt.ts ========== */
+
+import mqtt, { MqttClient } from 'mqtt';
+import { env } from '../../config/env.js';
+import { logger } from '../logging/logger.js';
+
+export type MeterMessage = {
+  meter: string;
+  energyType?: string;
+  value: number;
+  ts?: number;
+};
+
+type Handler = (msg: MeterMessage, raw: string) => void | Promise<void>;
+
+class MqttBus {
+  private client: MqttClient | null = null;
+  private handlers: Set<Handler> = new Set();
+
+  start() {
+    const topic = `${env.MQTT_TOPIC_PREFIX}/+/reading`;
+    this.client = mqtt.connect(env.MQTT_URL, { reconnectPeriod: 5000, connectTimeout: 8000 });
+    this.client.on('connect', () => {
+      logger.info({ url: env.MQTT_URL, topic }, 'mqtt connected');
+      this.client!.subscribe(topic, { qos: 0 });
+    });
+    this.client.on('error', (err) => logger.warn({ err: err.message }, 'mqtt error'));
+    this.client.on('close', () => logger.warn('mqtt closed, will retry'));
+    this.client.on('message', (rawTopic, payload) => {
+      const raw = payload.toString();
+      try {
+        const obj = JSON.parse(raw) as Partial<MeterMessage>;
+        const meterFromTopic = rawTopic.split('/').slice(-2, -1)[0];
+        const msg: MeterMessage = {
+          meter: obj.meter || meterFromTopic,
+          energyType: obj.energyType,
+          value: Number(obj.value),
+          ts: obj.ts
+        };
+        if (!Number.isFinite(msg.value)) return;
+        for (const h of this.handlers) Promise.resolve(h(msg, raw)).catch(() => undefined);
+      } catch (e) {
+        logger.debug({ raw }, 'mqtt non-json message');
+      }
+    });
+  }
+
+  on(handler: Handler) {
+    this.handlers.add(handler);
+    return () => this.handlers.delete(handler);
+  }
+
+  async stop() {
+    if (this.client) {
+      await new Promise<void>((resolve) => this.client!.end(false, () => resolve()));
+      this.client = null;
+    }
+  }
+}
+
+export const mqttBus = new MqttBus();
+
+
+/* ========== 文件: server/src/domain/identity/types.ts ========== */
+
+export type Role = 'platform_admin' | 'park_admin' | 'data_steward' | 'observer';
+
+export const ROLE_LABEL: Record<Role, string> = {
+  platform_admin: '系统管理员',
+  park_admin: '单位管理员',
+  data_steward: '数据员',
+  observer: '查看人员'
+};
+
+export const ROLE_RANK: Record<Role, number> = {
+  platform_admin: 100,
+  park_admin: 70,
+  data_steward: 40,
+  observer: 10
+};
+
+export type AccountStatus = 'active' | 'disabled' | 'locked';
+export type OrgKind = 'park' | 'enterprise' | 'workshop';
+
+export interface AccountPrincipal {
+  id: number;
+  username: string;
+  role: Role;
+  orgId: number | null;
+  displayName: string;
+}
+
+
+/* ========== 文件: server/src/domain/energy/types.ts ========== */
+
+export type EnergyType = 'electricity' | 'gas' | 'water' | 'steam' | 'heat' | 'coal';
+
+export const ENERGY_LABEL: Record<EnergyType, string> = {
+  electricity: '电力',
+  gas: '天然气',
+  water: '水',
+  steam: '蒸汽',
+  heat: '热力',
+  coal: '原煤'
+};
+
+export const DEFAULT_UNIT: Record<EnergyType, string> = {
+  electricity: 'kWh',
+  gas: 'm³',
+  water: 't',
+  steam: 't',
+  heat: 'GJ',
+  coal: 't'
+};
+
+// 单位标准煤换算系数 kgce / 单位 (GB/T 2589)
+export const COAL_EQUIVALENT: Record<EnergyType, number> = {
+  electricity: 0.1229,
+  gas: 1.330,
+  water: 0.0857,
+  steam: 94.16,
+  heat: 34.12,
+  coal: 714.3
+};
+
+
+/* ========== 文件: server/src/domain/carbon/factors.ts ========== */
+
+import type { EnergyType } from '../energy/types.js';
+
+// 默认排放因子 kgCO2e / 单位 (IPCC + 生态环境部 2024)
+export const DEFAULT_FACTORS: Record<EnergyType, { factor: number; unit: string; source: string }> = {
+  electricity: { factor: 0.5703, unit: 'kWh', source: '生态环境部2024全国电网平均' },
+  gas:         { factor: 2.162,  unit: 'm³',  source: 'IPCC 2006 默认值' },
+  water:       { factor: 0.91,   unit: 't',   source: '行业 LCA 平均' },
+  steam:       { factor: 110,    unit: 't',   source: '行业典型工业蒸汽' },
+  heat:        { factor: 73.6,   unit: 'GJ',  source: 'IPCC 2006 默认值' },
+  coal:        { factor: 1900,   unit: 't',   source: 'IPCC 2006 烟煤平均' }
+};
+
+// 千克转吨
+export const KG_PER_T = 1000;
+
+export function pickFactor(et: EnergyType): number {
+  return DEFAULT_FACTORS[et]?.factor ?? 0;
+}
+
+
+/* ========== 文件: server/src/application/identity/auth-service.ts ========== */
+
+import bcrypt from 'bcryptjs';
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import type { Role } from '../../domain/identity/types.js';
+
+export class AuthError extends Error {
+  constructor(public code: string, message: string) { super(message); }
+}
+
+export const authService = {
+  async verifyCredential(username: string, password: string, ip?: string) {
+    const acc = await prisma.account.findUnique({ where: { username } });
+    if (!acc) throw new AuthError('credential_invalid', '账号或密码错误');
+    if (acc.status !== 'active') throw new AuthError('account_disabled', '账号已停用');
+    const ok = await bcrypt.compare(password, acc.passwordHash);
+    if (!ok) throw new AuthError('credential_invalid', '账号或密码错误');
+    await prisma.account.update({
+      where: { id: acc.id },
+      data: { lastLoginAt: new Date(), lastLoginIp: ip }
+    });
+    return acc;
+  },
+
+  async changePassword(accountId: number, oldPwd: string, newPwd: string) {
+    const acc = await prisma.account.findUnique({ where: { id: accountId } });
+    if (!acc) throw new AuthError('not_found', '账号不存在');
+    const ok = await bcrypt.compare(oldPwd, acc.passwordHash);
+    if (!ok) throw new AuthError('credential_invalid', '原密码错误');
+    if (newPwd.length < 8) throw new AuthError('weak_password', '新密码至少 8 位');
+    const hash = await bcrypt.hash(newPwd, 10);
+    await prisma.account.update({ where: { id: accountId }, data: { passwordHash: hash, mustChangePwd: false } });
+  },
+
+  async profile(accountId: number) {
+    const acc = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: { org: true }
+    });
+    if (!acc) throw new AuthError('not_found', '账号不存在');
+    return {
+      id: acc.id,
+      username: acc.username,
+      displayName: acc.displayName,
+      role: acc.role as Role,
+      org: acc.org ? { id: acc.org.id, code: acc.org.code, name: acc.org.name } : null,
+      mustChangePwd: acc.mustChangePwd,
+      lastLoginAt: acc.lastLoginAt
+    };
+  }
+};
+
+
+/* ========== 文件: server/src/application/account/account-service.ts ========== */
+
+import bcrypt from 'bcryptjs';
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import type { Role } from '../../domain/identity/types.js';
+
+export const accountService = {
+  async listAccounts() {
+    return prisma.account.findMany({
+      include: { org: { select: { id: true, code: true, name: true } } },
+      orderBy: { id: 'asc' }
+    });
+  },
+
+  async createAccount(data: { username: string; password: string; displayName: string; role: Role; orgId?: number }) {
+    const hash = await bcrypt.hash(data.password, 10);
+    return prisma.account.create({
+      data: {
+        username: data.username,
+        passwordHash: hash,
+        displayName: data.displayName,
+        role: data.role,
+        orgId: data.orgId,
+        mustChangePwd: true
+      }
+    });
+  },
+
+  async updateAccount(id: number, patch: Partial<{ displayName: string; role: Role; status: string; orgId: number }>) {
+    return prisma.account.update({ where: { id }, data: patch });
+  },
+
+  async resetPassword(id: number, newPwd: string) {
+    const hash = await bcrypt.hash(newPwd, 10);
+    return prisma.account.update({ where: { id }, data: { passwordHash: hash, mustChangePwd: true } });
+  },
+
+  async listOrgs() {
+    return prisma.organization.findMany({ orderBy: { id: 'asc' } });
+  },
+
+  async createOrg(data: { code: string; name: string; parentId?: number; kind?: string; remark?: string }) {
+    return prisma.organization.create({ data });
+  },
+
+  async updateOrg(id: number, patch: Partial<{ name: string; parentId: number; kind: string; remark: string }>) {
+    return prisma.organization.update({ where: { id }, data: patch });
+  },
+
+  async listAudits(limit = 200) {
+    return prisma.auditLog.findMany({
+      include: { account: { select: { id: true, username: true, displayName: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit
+    });
+  },
+
+  async writeAudit(accountId: number | null, action: string, target?: string, detail?: string, ip?: string) {
+    await prisma.auditLog.create({ data: { accountId, action, target, detail, ip } });
+  }
+};
+
+
+/* ========== 文件: server/src/application/meter/meter-service.ts ========== */
+
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import { DEFAULT_UNIT, type EnergyType } from '../../domain/energy/types.js';
+
+export const meterService = {
+  async list(filter: { orgId?: number; energyType?: string; status?: string } = {}) {
+    return prisma.meterPoint.findMany({
+      where: {
+        orgId: filter.orgId,
+        energyType: filter.energyType,
+        status: filter.status
+      },
+      include: { org: { select: { id: true, code: true, name: true } } },
+      orderBy: [{ orgId: 'asc' }, { code: 'asc' }]
+    });
+  },
+
+  async get(id: number) {
+    return prisma.meterPoint.findUnique({
+      where: { id },
+      include: { org: true }
+    });
+  },
+
+  async create(data: {
+    code: string; name: string; energyType: EnergyType; orgId: number;
+    unit?: string; location?: string; scaleFactor?: number; mqttTopic?: string;
+  }) {
+    return prisma.meterPoint.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        energyType: data.energyType,
+        unit: data.unit || DEFAULT_UNIT[data.energyType],
+        orgId: data.orgId,
+        location: data.location,
+        scaleFactor: data.scaleFactor ?? 1,
+        mqttTopic: data.mqttTopic
+      }
+    });
+  },
+
+  async update(id: number, patch: Partial<{ name: string; location: string; status: string; scaleFactor: number; mqttTopic: string }>) {
+    return prisma.meterPoint.update({ where: { id }, data: patch });
+  },
+
+  async remove(id: number) {
+    return prisma.meterPoint.delete({ where: { id } });
+  },
+
+  async findByCode(code: string) {
+    return prisma.meterPoint.findUnique({ where: { code } });
+  },
+
+  async findByMqttTopic(topic: string) {
+    return prisma.meterPoint.findUnique({ where: { mqttTopic: topic } });
+  }
+};
+
+
+/* ========== 文件: server/src/application/energy/energy-service.ts ========== */
+
+import { tsdb } from '../../infrastructure/timeseries/influx.js';
+import { meterService } from '../meter/meter-service.js';
+import { logger } from '../../infrastructure/logging/logger.js';
+
+export const energyService = {
+  async ingest(input: { meterCode: string; value: number; ts?: number }) {
+    const meter = await meterService.findByCode(input.meterCode);
+    if (!meter) {
+      logger.debug({ code: input.meterCode }, 'ingest skipped: meter not registered');
+      return null;
+    }
+    if (meter.status !== 'active') return null;
+    const scaled = input.value * (meter.scaleFactor || 1);
+    tsdb.writeReading(meter.code, meter.energyType, scaled, input.ts);
+    return { meter: meter.code, value: scaled, ts: input.ts ?? Date.now() };
+  },
+
+  async readingsByMeter(meterCode: string, range: { start: string; stop: string; every?: string }) {
+    return tsdb.rangeByMeter(meterCode, range.start, range.stop, range.every || '1h');
+  },
+
+  async sumByType(range: { start: string; stop: string }) {
+    return tsdb.sumByType(range.start, range.stop);
+  }
+};
+
+
+/* ========== 文件: server/src/application/carbon/carbon-service.ts ========== */
+
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import { energyService } from '../energy/energy-service.js';
+import { DEFAULT_FACTORS, KG_PER_T, pickFactor } from '../../domain/carbon/factors.js';
+import { ENERGY_LABEL, type EnergyType } from '../../domain/energy/types.js';
+
+const ALL_TYPES: EnergyType[] = ['electricity', 'gas', 'water', 'steam', 'heat', 'coal'];
+
+export const carbonService = {
+  async listFactors() {
+    const persisted = await prisma.carbonFactor.findMany({ orderBy: [{ energyType: 'asc' }, { effectiveFrom: 'desc' }] });
+    if (persisted.length) return persisted;
+    return ALL_TYPES.map((t, i) => ({
+      id: -1 - i,
+      energyType: t,
+      factor: DEFAULT_FACTORS[t].factor,
+      unit: DEFAULT_FACTORS[t].unit,
+      source: DEFAULT_FACTORS[t].source,
+      effectiveFrom: new Date(),
+      effectiveTo: null,
+      remark: '系统内置默认值',
+      createdAt: new Date()
+    }));
+  },
+
+  async upsertFactor(data: { energyType: EnergyType; factor: number; unit: string; effectiveFrom: Date; source: string; remark?: string }) {
+    return prisma.carbonFactor.create({ data });
+  },
+
+  // 按时间区间核算碳足迹(基于能源时序数据)
+  async accountFootprint(start: string, stop: string) {
+    const sums = await energyService.sumByType({ start, stop });
+    const breakdown = ALL_TYPES.map((t) => {
+      const energy = sums[t] || 0;
+      const factor = pickFactor(t);
+      const co2eKg = energy * factor;
+      return {
+        energyType: t,
+        label: ENERGY_LABEL[t],
+        energy,
+        unit: DEFAULT_FACTORS[t].unit,
+        factor,
+        co2eKg,
+        co2eT: co2eKg / KG_PER_T
+      };
+    });
+    const totalT = breakdown.reduce((acc, b) => acc + b.co2eT, 0);
+    return { start, stop, totalT, breakdown };
+  }
+};
+
+
+/* ========== 文件: server/src/application/quota/quota-service.ts ========== */
+
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import { carbonService } from '../carbon/carbon-service.js';
+
+export const quotaService = {
+  async list(period?: string) {
+    return prisma.complianceQuota.findMany({
+      where: { period },
+      include: { org: { select: { id: true, code: true, name: true } } },
+      orderBy: [{ period: 'desc' }, { orgId: 'asc' }]
+    });
+  },
+
+  async upsert(data: { period: string; orgId: number; allocated: number; source?: string; remark?: string }) {
+    const existing = await prisma.complianceQuota.findFirst({
+      where: { period: data.period, orgId: data.orgId, source: data.source || 'government' }
+    });
+    if (existing) {
+      return prisma.complianceQuota.update({
+        where: { id: existing.id },
+        data: { allocated: data.allocated, remark: data.remark }
+      });
+    }
+    return prisma.complianceQuota.create({
+      data: {
+        period: data.period,
+        orgId: data.orgId,
+        allocated: data.allocated,
+        source: data.source || 'government',
+        remark: data.remark
+      }
+    });
+  },
+
+  async settle(period: string) {
+    const start = `${period}-01-01T00:00:00Z`;
+    const stop = `${parseInt(period, 10) + 1}-01-01T00:00:00Z`;
+    const footprint = await carbonService.accountFootprint(start, stop);
+    const totalUsed = footprint.totalT;
+    const quotas = await prisma.complianceQuota.findMany({ where: { period } });
+    for (const q of quotas) {
+      const share = totalUsed * (q.allocated / Math.max(quotas.reduce((s, x) => s + x.allocated, 0), 1));
+      await prisma.complianceQuota.update({ where: { id: q.id }, data: { used: share } });
+    }
+    return { period, totalUsed, count: quotas.length };
+  },
+
+  async overview(period: string) {
+    const quotas = await prisma.complianceQuota.findMany({
+      where: { period },
+      include: { org: true }
+    });
+    const totalAllocated = quotas.reduce((s, q) => s + q.allocated, 0);
+    const totalUsed = quotas.reduce((s, q) => s + q.used, 0);
+    return {
+      period,
+      totalAllocated,
+      totalUsed,
+      remaining: totalAllocated - totalUsed,
+      ratio: totalAllocated > 0 ? totalUsed / totalAllocated : 0,
+      items: quotas
+    };
+  }
+};
+
+
+/* ========== 文件: server/src/application/risk/risk-service.ts ========== */
+
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import { logger } from '../../infrastructure/logging/logger.js';
+
+type Severity = 'info' | 'warning' | 'critical';
+
+const lastFireAt = new Map<number, number>(); // ruleId -> ts
+
+function parseThreshold(raw: string): number | [number, number] {
+  try { const v = JSON.parse(raw); if (Array.isArray(v) && v.length === 2) return v as [number, number]; return Number(v); }
+  catch { return Number(raw); }
+}
+
+function check(operator: string, value: number, threshold: number | [number, number]): boolean {
+  if (Array.isArray(threshold)) {
+    const [lo, hi] = threshold;
+    if (operator === 'between') return value >= lo && value <= hi;
+    if (operator === 'outside') return value < lo || value > hi;
+    return false;
+  }
+  switch (operator) {
+    case 'gt': return value > threshold;
+    case 'gte': return value >= threshold;
+    case 'lt': return value < threshold;
+    case 'lte': return value <= threshold;
+    default: return false;
+  }
+}
+
+type Listener = (event: { id: number; severity: Severity; message: string; meterCode?: string }) => void;
+const listeners = new Set<Listener>();
+
+export const riskService = {
+  async listRules() {
+    return prisma.riskRule.findMany({ orderBy: { id: 'asc' } });
+  },
+
+  async upsertRule(data: { code: string; name: string; scope: string; metric: string; operator: string; threshold: string; severity?: Severity; cooldownSec?: number; enabled?: boolean; remark?: string }) {
+    return prisma.riskRule.upsert({
+      where: { code: data.code },
+      create: { ...data, severity: data.severity || 'warning', cooldownSec: data.cooldownSec ?? 300, enabled: data.enabled ?? true },
+      update: data
+    });
+  },
+
+  async listEvents(filter: { status?: string; severity?: string; limit?: number } = {}) {
+    return prisma.riskEvent.findMany({
+      where: { status: filter.status, severity: filter.severity },
+      include: { rule: true, meter: { select: { id: true, code: true, name: true } } },
+      orderBy: { occurredAt: 'desc' },
+      take: filter.limit || 100
+    });
+  },
+
+  async ack(id: number, accountId: number) {
+    return prisma.riskEvent.update({ where: { id }, data: { status: 'acknowledged', handledBy: accountId, handledAt: new Date() } });
+  },
+
+  async close(id: number, accountId: number, note?: string) {
+    return prisma.riskEvent.update({ where: { id }, data: { status: 'closed', handledBy: accountId, handledAt: new Date(), closingNote: note } });
+  },
+
+  onEvent(fn: Listener) { listeners.add(fn); return () => listeners.delete(fn); },
+
+  async evaluate(meterCode: string, value: number) {
+    const meter = await prisma.meterPoint.findUnique({ where: { code: meterCode } });
+    if (!meter) return;
+    const rules = await prisma.riskRule.findMany({ where: { enabled: true } });
+    const now = Date.now();
+    for (const rule of rules) {
+      if (rule.scope !== 'meter' && rule.scope !== 'global') continue;
+      if (rule.metric !== 'value') continue;
+      const last = lastFireAt.get(rule.id) || 0;
+      if (now - last < rule.cooldownSec * 1000) continue;
+      const t = parseThreshold(rule.threshold);
+      if (!check(rule.operator, value, t)) continue;
+      lastFireAt.set(rule.id, now);
+      try {
+        const ev = await prisma.riskEvent.create({
+          data: {
+            ruleId: rule.id,
+            meterId: meter.id,
+            severity: rule.severity,
+            value,
+            message: `${meter.name} 触发规则【${rule.name}】当前值 ${value}`
+          }
+        });
+        for (const l of listeners) l({ id: ev.id, severity: ev.severity as Severity, message: ev.message, meterCode });
+      } catch (e) {
+        logger.warn({ err: (e as Error).message }, 'risk event persist failed');
+      }
+    }
+  }
+};
+
+
+/* ========== 文件: server/src/application/report/report-service.ts ========== */
+
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import { carbonService } from '../carbon/carbon-service.js';
+
+export const reportService = {
+  async list(filter: { period?: string; channel?: string } = {}) {
+    return prisma.submissionRecord.findMany({
+      where: { period: filter.period, channel: filter.channel },
+      include: { org: { select: { id: true, code: true, name: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+  },
+
+  async prepare(period: string, orgId: number, channel: string) {
+    // period 形如 YYYYMM 或 YYYY,转 ISO 区间
+    let start: string, stop: string;
+    if (period.length === 6) {
+      const y = parseInt(period.slice(0, 4), 10), m = parseInt(period.slice(4, 6), 10);
+      start = new Date(Date.UTC(y, m - 1, 1)).toISOString();
+      stop = new Date(Date.UTC(y, m, 1)).toISOString();
+    } else {
+      const y = parseInt(period, 10);
+      start = new Date(Date.UTC(y, 0, 1)).toISOString();
+      stop = new Date(Date.UTC(y + 1, 0, 1)).toISOString();
+    }
+    const footprint = await carbonService.accountFootprint(start, stop);
+    const payload = {
+      period, orgId, channel,
+      generatedAt: new Date().toISOString(),
+      totalCO2eT: footprint.totalT,
+      breakdown: footprint.breakdown
+    };
+    return prisma.submissionRecord.create({
+      data: {
+        period, orgId, channel,
+        status: 'pending',
+        payloadJson: JSON.stringify(payload)
+      }
+    });
+  },
+
+  async submit(id: number) {
+    // 仅占位:实际接政府平台 API
+    return prisma.submissionRecord.update({
+      where: { id },
+      data: { status: 'submitted', submittedAt: new Date() }
+    });
+  },
+
+  async mark(id: number, status: 'accepted' | 'rejected', response?: string, reason?: string) {
+    return prisma.submissionRecord.update({
+      where: { id },
+      data: {
+        status,
+        responseJson: response,
+        rejectReason: reason,
+        acceptedAt: status === 'accepted' ? new Date() : undefined
+      }
+    });
+  }
+};
+
+
+/* ========== 文件: server/src/application/cockpit/cockpit-service.ts ========== */
+
+import { prisma } from '../../infrastructure/persistence/prisma.js';
+import { carbonService } from '../carbon/carbon-service.js';
+import { quotaService } from '../quota/quota-service.js';
+
+export const cockpitService = {
+  async summary() {
+    const now = new Date();
+    const yyyy = now.getUTCFullYear();
+    const monthStart = new Date(Date.UTC(yyyy, now.getUTCMonth(), 1)).toISOString();
+    const yearStart = new Date(Date.UTC(yyyy, 0, 1)).toISOString();
+    const monthFootprint = await carbonService.accountFootprint(monthStart, now.toISOString());
+    const yearFootprint = await carbonService.accountFootprint(yearStart, now.toISOString());
+
+    const [metersTotal, metersActive, openRisks, criticalRisks, quotas] = await Promise.all([
+      prisma.meterPoint.count(),
+      prisma.meterPoint.count({ where: { status: 'active' } }),
+      prisma.riskEvent.count({ where: { status: 'open' } }),
+      prisma.riskEvent.count({ where: { status: 'open', severity: 'critical' } }),
+      quotaService.overview(String(yyyy))
+    ]);
+
+    return {
+      generatedAt: now.toISOString(),
+      year: yyyy,
+      kpis: {
+        yearTotalCO2eT: yearFootprint.totalT,
+        monthTotalCO2eT: monthFootprint.totalT,
+        metersTotal,
+        metersActive,
+        openRisks,
+        criticalRisks,
+        quotaAllocated: quotas.totalAllocated,
+        quotaUsed: quotas.totalUsed,
+        quotaRatio: quotas.ratio
+      },
+      monthBreakdown: monthFootprint.breakdown,
+      yearBreakdown: yearFootprint.breakdown
+    };
+  },
+
+  // 当年逐月碳排放(走 InfluxDB 聚合,失败则零)
+  async monthlyTrend(year: number) {
+    const rows: Array<{ month: number; co2eT: number }> = [];
+    for (let m = 0; m < 12; m++) {
+      const s = new Date(Date.UTC(year, m, 1)).toISOString();
+      const e = new Date(Date.UTC(year, m + 1, 1)).toISOString();
+      const f = await carbonService.accountFootprint(s, e);
+      rows.push({ month: m + 1, co2eT: f.totalT });
+    }
+    return rows;
+  }
+};
+
+
+/* ========== 文件: server/src/interface/plugins/auth-plugin.ts ========== */
+
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import jwt from '@fastify/jwt';
+import { env } from '../../config/env.js';
+import type { Role } from '../../domain/identity/types.js';
+import { ROLE_RANK } from '../../domain/identity/types.js';
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    principal?: { id: number; username: string; role: Role; orgId: number | null; displayName: string };
+  }
+  interface FastifyInstance {
+    requireAuth: (minRole?: Role) => (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
+
+export async function registerAuth(app: FastifyInstance) {
+  await app.register(jwt, { secret: env.JWT_SECRET, sign: { expiresIn: env.JWT_TTL } });
+
+  app.decorate('requireAuth', (minRole: Role = 'observer') => {
+    return async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const payload = await req.jwtVerify<{ sub: number; username: string; role: Role; orgId: number | null; displayName: string }>();
+        req.principal = {
+          id: payload.sub,
+          username: payload.username,
+          role: payload.role,
+          orgId: payload.orgId ?? null,
+          displayName: payload.displayName
+        };
+        if (ROLE_RANK[req.principal.role] < ROLE_RANK[minRole]) {
+          return reply.code(403).send({ ok: false, error: 'forbidden', message: '权限不足' });
+        }
+      } catch {
+        return reply.code(401).send({ ok: false, error: 'unauthorized', message: '请先登录' });
+      }
+    };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/auth-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { authService, AuthError } from '../../application/identity/auth-service.js';
+import { accountService } from '../../application/account/account-service.js';
+
+export async function authRoutes(app: FastifyInstance) {
+  app.post('/login', async (req, reply) => {
+    const body = z.object({ username: z.string().min(2), password: z.string().min(6) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    try {
+      const acc = await authService.verifyCredential(body.data.username, body.data.password, req.ip);
+      const token = app.jwt.sign({
+        sub: acc.id,
+        username: acc.username,
+        role: acc.role,
+        orgId: acc.orgId,
+        displayName: acc.displayName
+      });
+      await accountService.writeAudit(acc.id, 'login', undefined, undefined, req.ip);
+      return { ok: true, data: { token, mustChangePwd: acc.mustChangePwd } };
+    } catch (e) {
+      if (e instanceof AuthError) return reply.code(401).send({ ok: false, error: e.code, message: e.message });
+      throw e;
+    }
+  });
+
+  app.get('/me', { preHandler: app.requireAuth() }, async (req) => {
+    const profile = await authService.profile(req.principal!.id);
+    return { ok: true, data: profile };
+  });
+
+  app.post('/change-password', { preHandler: app.requireAuth() }, async (req, reply) => {
+    const body = z.object({ oldPassword: z.string().min(6), newPassword: z.string().min(8) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    try {
+      await authService.changePassword(req.principal!.id, body.data.oldPassword, body.data.newPassword);
+      await accountService.writeAudit(req.principal!.id, 'change_password', undefined, undefined, req.ip);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof AuthError) return reply.code(400).send({ ok: false, error: e.code, message: e.message });
+      throw e;
+    }
+  });
+
+  app.post('/logout', { preHandler: app.requireAuth() }, async (req) => {
+    await accountService.writeAudit(req.principal!.id, 'logout', undefined, undefined, req.ip);
+    return { ok: true };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/cockpit-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { cockpitService } from '../../application/cockpit/cockpit-service.js';
+
+export async function cockpitRoutes(app: FastifyInstance) {
+  app.get('/summary', { preHandler: app.requireAuth() }, async () => {
+    return { ok: true, data: await cockpitService.summary() };
+  });
+
+  app.get('/trend', { preHandler: app.requireAuth() }, async (req) => {
+    const year = Number((req.query as any)?.year ?? new Date().getUTCFullYear());
+    return { ok: true, data: await cockpitService.monthlyTrend(year) };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/meter-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { meterService } from '../../application/meter/meter-service.js';
+import { accountService } from '../../application/account/account-service.js';
+
+const energyEnum = z.enum(['electricity', 'gas', 'water', 'steam', 'heat', 'coal']);
+
+export async function meterRoutes(app: FastifyInstance) {
+  app.get('/', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return { ok: true, data: await meterService.list({ orgId: q.orgId && +q.orgId, energyType: q.energyType, status: q.status }) };
+  });
+
+  app.get('/:id', { preHandler: app.requireAuth() }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const m = await meterService.get(id);
+    if (!m) return reply.code(404).send({ ok: false, message: '计量点不存在' });
+    return { ok: true, data: m };
+  });
+
+  app.post('/', { preHandler: app.requireAuth('data_steward') }, async (req, reply) => {
+    const body = z.object({
+      code: z.string().min(1),
+      name: z.string().min(1),
+      energyType: energyEnum,
+      orgId: z.number().int(),
+      unit: z.string().optional(),
+      location: z.string().optional(),
+      scaleFactor: z.number().optional(),
+      mqttTopic: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const m = await meterService.create(body.data);
+    await accountService.writeAudit(req.principal!.id, 'meter.create', String(m.id), m.code, req.ip);
+    return { ok: true, data: m };
+  });
+
+  app.put('/:id', { preHandler: app.requireAuth('data_steward') }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const body = z.object({
+      name: z.string().optional(),
+      location: z.string().optional(),
+      status: z.string().optional(),
+      scaleFactor: z.number().optional(),
+      mqttTopic: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const m = await meterService.update(id, body.data);
+    await accountService.writeAudit(req.principal!.id, 'meter.update', String(id), undefined, req.ip);
+    return { ok: true, data: m };
+  });
+
+  app.delete('/:id', { preHandler: app.requireAuth('park_admin') }, async (req) => {
+    const id = Number((req.params as any).id);
+    await meterService.remove(id);
+    await accountService.writeAudit(req.principal!.id, 'meter.delete', String(id), undefined, req.ip);
+    return { ok: true };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/energy-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { energyService } from '../../application/energy/energy-service.js';
+import { riskService } from '../../application/risk/risk-service.js';
+
+export async function energyRoutes(app: FastifyInstance) {
+  // 手工补录或网关 HTTP 推送
+  app.post('/ingest', { preHandler: app.requireAuth('data_steward') }, async (req, reply) => {
+    const body = z.object({
+      meterCode: z.string(),
+      value: z.number(),
+      ts: z.number().int().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const r = await energyService.ingest(body.data);
+    if (!r) return reply.code(404).send({ ok: false, message: '计量点未登记或已停用' });
+    riskService.evaluate(body.data.meterCode, r.value).catch(() => undefined);
+    return { ok: true, data: r };
+  });
+
+  app.get('/readings', { preHandler: app.requireAuth() }, async (req, reply) => {
+    const q = req.query as any;
+    if (!q.meterCode) return reply.code(400).send({ ok: false, message: 'meterCode 必填' });
+    const rows = await energyService.readingsByMeter(q.meterCode, {
+      start: q.start || '-24h',
+      stop: q.stop || 'now()',
+      every: q.every || '15m'
+    });
+    return { ok: true, data: rows };
+  });
+
+  app.get('/sum-by-type', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return { ok: true, data: await energyService.sumByType({ start: q.start || '-30d', stop: q.stop || 'now()' }) };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/carbon-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { carbonService } from '../../application/carbon/carbon-service.js';
+
+export async function carbonRoutes(app: FastifyInstance) {
+  app.get('/factors', { preHandler: app.requireAuth() }, async () => {
+    return { ok: true, data: await carbonService.listFactors() };
+  });
+
+  app.post('/factors', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const body = z.object({
+      energyType: z.enum(['electricity', 'gas', 'water', 'steam', 'heat', 'coal']),
+      factor: z.number().positive(),
+      unit: z.string().min(1),
+      effectiveFrom: z.string().datetime(),
+      source: z.string().min(1),
+      remark: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const f = await carbonService.upsertFactor({ ...body.data, effectiveFrom: new Date(body.data.effectiveFrom) });
+    return { ok: true, data: f };
+  });
+
+  app.get('/footprint', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return {
+      ok: true,
+      data: await carbonService.accountFootprint(q.start || '-30d', q.stop || 'now()')
+    };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/quota-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { quotaService } from '../../application/quota/quota-service.js';
+
+export async function quotaRoutes(app: FastifyInstance) {
+  app.get('/', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return { ok: true, data: await quotaService.list(q.period) };
+  });
+
+  app.get('/overview', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return { ok: true, data: await quotaService.overview(q.period || String(new Date().getUTCFullYear())) };
+  });
+
+  app.post('/', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const body = z.object({
+      period: z.string().regex(/^\d{4}$/),
+      orgId: z.number().int(),
+      allocated: z.number().nonnegative(),
+      source: z.string().optional(),
+      remark: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    return { ok: true, data: await quotaService.upsert(body.data) };
+  });
+
+  app.post('/settle', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const body = z.object({ period: z.string() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    return { ok: true, data: await quotaService.settle(body.data.period) };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/risk-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { riskService } from '../../application/risk/risk-service.js';
+
+export async function riskRoutes(app: FastifyInstance) {
+  app.get('/rules', { preHandler: app.requireAuth() }, async () => {
+    return { ok: true, data: await riskService.listRules() };
+  });
+
+  app.post('/rules', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const body = z.object({
+      code: z.string(), name: z.string(),
+      scope: z.enum(['meter', 'org', 'global']),
+      metric: z.string(),
+      operator: z.enum(['gt', 'gte', 'lt', 'lte', 'between', 'outside']),
+      threshold: z.string(),
+      severity: z.enum(['info', 'warning', 'critical']).optional(),
+      cooldownSec: z.number().int().optional(),
+      enabled: z.boolean().optional(),
+      remark: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    return { ok: true, data: await riskService.upsertRule(body.data) };
+  });
+
+  app.get('/events', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return { ok: true, data: await riskService.listEvents({ status: q.status, severity: q.severity, limit: q.limit && +q.limit }) };
+  });
+
+  app.post('/events/:id/ack', { preHandler: app.requireAuth('data_steward') }, async (req) => {
+    const id = Number((req.params as any).id);
+    return { ok: true, data: await riskService.ack(id, req.principal!.id) };
+  });
+
+  app.post('/events/:id/close', { preHandler: app.requireAuth('data_steward') }, async (req) => {
+    const id = Number((req.params as any).id);
+    const body = z.object({ note: z.string().optional() }).safeParse(req.body || {});
+    return { ok: true, data: await riskService.close(id, req.principal!.id, body.success ? body.data.note : undefined) };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/report-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { reportService } from '../../application/report/report-service.js';
+
+export async function reportRoutes(app: FastifyInstance) {
+  app.get('/', { preHandler: app.requireAuth() }, async (req) => {
+    const q = req.query as any;
+    return { ok: true, data: await reportService.list({ period: q.period, channel: q.channel }) };
+  });
+
+  app.post('/prepare', { preHandler: app.requireAuth('data_steward') }, async (req, reply) => {
+    const body = z.object({
+      period: z.string(),
+      orgId: z.number().int(),
+      channel: z.enum(['gov_energy', 'gov_carbon', 'mrv'])
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    return { ok: true, data: await reportService.prepare(body.data.period, body.data.orgId, body.data.channel) };
+  });
+
+  app.post('/:id/submit', { preHandler: app.requireAuth('park_admin') }, async (req) => {
+    const id = Number((req.params as any).id);
+    return { ok: true, data: await reportService.submit(id) };
+  });
+
+  app.post('/:id/mark', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const body = z.object({
+      status: z.enum(['accepted', 'rejected']),
+      response: z.string().optional(),
+      reason: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    return { ok: true, data: await reportService.mark(id, body.data.status, body.data.response, body.data.reason) };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/http/account-routes.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import { accountService } from '../../application/account/account-service.js';
+
+const roleEnum = z.enum(['platform_admin', 'park_admin', 'data_steward', 'observer']);
+
+export async function accountRoutes(app: FastifyInstance) {
+  app.get('/accounts', { preHandler: app.requireAuth('park_admin') }, async () => {
+    return { ok: true, data: await accountService.listAccounts() };
+  });
+
+  app.post('/accounts', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const body = z.object({
+      username: z.string().min(2),
+      password: z.string().min(8),
+      displayName: z.string().min(1),
+      role: roleEnum,
+      orgId: z.number().int().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const acc = await accountService.createAccount(body.data);
+    await accountService.writeAudit(req.principal!.id, 'account.create', String(acc.id), acc.username, req.ip);
+    return { ok: true, data: acc };
+  });
+
+  app.put('/accounts/:id', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const body = z.object({
+      displayName: z.string().optional(),
+      role: roleEnum.optional(),
+      status: z.string().optional(),
+      orgId: z.number().int().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const acc = await accountService.updateAccount(id, body.data);
+    await accountService.writeAudit(req.principal!.id, 'account.update', String(id), undefined, req.ip);
+    return { ok: true, data: acc };
+  });
+
+  app.post('/accounts/:id/reset', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const body = z.object({ newPassword: z.string().min(8) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    await accountService.resetPassword(id, body.data.newPassword);
+    await accountService.writeAudit(req.principal!.id, 'account.reset_password', String(id), undefined, req.ip);
+    return { ok: true };
+  });
+
+  app.get('/orgs', { preHandler: app.requireAuth() }, async () => {
+    return { ok: true, data: await accountService.listOrgs() };
+  });
+
+  app.post('/orgs', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const body = z.object({
+      code: z.string().min(1),
+      name: z.string().min(1),
+      parentId: z.number().int().optional(),
+      kind: z.string().optional(),
+      remark: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const org = await accountService.createOrg(body.data);
+    await accountService.writeAudit(req.principal!.id, 'org.create', String(org.id), org.code, req.ip);
+    return { ok: true, data: org };
+  });
+
+  app.put('/orgs/:id', { preHandler: app.requireAuth('park_admin') }, async (req, reply) => {
+    const id = Number((req.params as any).id);
+    const body = z.object({
+      name: z.string().optional(),
+      parentId: z.number().int().optional(),
+      kind: z.string().optional(),
+      remark: z.string().optional()
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ ok: false, message: '参数有误' });
+    const org = await accountService.updateOrg(id, body.data);
+    return { ok: true, data: org };
+  });
+
+  app.get('/audits', { preHandler: app.requireAuth('park_admin') }, async (req) => {
+    const limit = Number((req.query as any)?.limit || 200);
+    return { ok: true, data: await accountService.listAudits(limit) };
+  });
+}
+
+
+/* ========== 文件: server/src/interface/ws/realtime.ts ========== */
+
+import type { FastifyInstance } from 'fastify';
+import websocket from '@fastify/websocket';
+import { riskService } from '../../application/risk/risk-service.js';
+
+type Client = { send: (data: string) => void; alive: boolean };
+
+const clients = new Set<Client>();
+
+riskService.onEvent((ev) => {
+  const payload = JSON.stringify({ type: 'risk', payload: ev });
+  for (const c of clients) { if (c.alive) c.send(payload); }
+});
+
+export function broadcastMeterTick(meter: string, value: number) {
+  const payload = JSON.stringify({ type: 'meter', payload: { meter, value, ts: Date.now() } });
+  for (const c of clients) { if (c.alive) c.send(payload); }
+}
+
+export async function registerRealtime(app: FastifyInstance) {
+  await app.register(websocket);
+  app.get('/ws', { websocket: true }, (socket) => {
+    const c: Client = { send: (s) => socket.send(s), alive: true };
+    clients.add(c);
+    c.send(JSON.stringify({ type: 'hello', payload: { ts: Date.now() } }));
+    const heartbeat = setInterval(() => { if (c.alive) c.send(JSON.stringify({ type: 'ping', payload: Date.now() })); }, 30_000);
+    socket.on('close', () => { c.alive = false; clearInterval(heartbeat); clients.delete(c); });
+    socket.on('error', () => { c.alive = false; clearInterval(heartbeat); clients.delete(c); });
+  });
+}
+
+
+/* ========== 文件: server/prisma/schema.prisma ========== */
+
+// IECSP 关系型模型
+// 时序数据(能源读数、碳排放分钟级)走 InfluxDB,不在此处定义
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== 身份与组织 =====
+
+model Organization {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  parentId  Int?
+  kind      String   @default("park") // park / enterprise / workshop
+  remark    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Organization?  @relation("OrgTree", fields: [parentId], references: [id])
+  children Organization[] @relation("OrgTree")
+  accounts Account[]
+  meters   MeterPoint[]
+  quotas   ComplianceQuota[]
+  reports  SubmissionRecord[]
+}
+
+model Account {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique
+  passwordHash  String
+  displayName   String
+  role          String    @default("observer") // platform_admin / park_admin / data_steward / observer
+  orgId         Int?
+  status        String    @default("active")   // active / disabled / locked
+  mustChangePwd Boolean   @default(false)
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  org      Organization? @relation(fields: [orgId], references: [id])
+  audits   AuditLog[]
+}
+
+// ===== 计量点与能源因子 =====
+
+model MeterPoint {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  energyType  String   // electricity / gas / water / steam / heat / coal
+  unit        String   // kWh / m3 / t / GJ
+  orgId       Int
+  location    String?
+  status      String   @default("active") // active / paused / scrapped
+  scaleFactor Float    @default(1.0)
+  mqttTopic   String?  @unique
+  installedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id])
+  riskEvents  RiskEvent[]
+}
+
+model CarbonFactor {
+  id             Int      @id @default(autoincrement())
+  energyType     String
+  factor         Float    // kg CO2e / 单位
+  unit           String   // 与 MeterPoint.unit 一致
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  source         String   // 国标 / 行业 / 自定义
+  remark         String?
+  createdAt      DateTime @default(now())
+
+  @@index([energyType, effectiveFrom])
+}
+
+// ===== 履约配额 =====
+
+model ComplianceQuota {
+  id         Int      @id @default(autoincrement())
+  period     String   // YYYY 年度
+  orgId      Int
+  allocated  Float    // 配额(tCO2e)
+  used       Float    @default(0)
+  source     String   @default("government") // government / market / offset
+  status     String   @default("active") // active / settled / overdue
+  remark     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([period, orgId, source])
+}
+
+// ===== 风险规则与事件 =====
+
+model RiskRule {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  name       String
+  scope      String   // meter / org / global
+  metric     String   // value / rate / sum / quota_ratio
+  operator   String   // gt / lt / gte / lte / between / outside
+  threshold  String   // JSON 字符串,如 "[0,100]" 或 "85"
+  severity   String   @default("warning") // info / warning / critical
+  enabled    Boolean  @default(true)
+  cooldownSec Int     @default(300)
+  remark     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  events RiskEvent[]
+}
+
+model RiskEvent {
+  id         Int      @id @default(autoincrement())
+  ruleId     Int
+  meterId    Int?
+  severity   String   @default("warning")
+  occurredAt DateTime @default(now())
+  value      Float?
+  message    String
+  status     String   @default("open") // open / acknowledged / closed
+  handledBy  Int?
+  handledAt  DateTime?
+  closingNote String?
+
+  rule  RiskRule    @relation(fields: [ruleId], references: [id])
+  meter MeterPoint? @relation(fields: [meterId], references: [id])
+
+  @@index([status, occurredAt])
+}
+
+// ===== 监管报送 =====
+
+model SubmissionRecord {
+  id           Int      @id @default(autoincrement())
+  period       String   // YYYYMM / YYYY
+  orgId        Int
+  channel      String   // gov_energy / gov_carbon / mrv
+  status       String   @default("pending") // pending / submitted / accepted / rejected
+  payloadJson  String   // 报送内容快照
+  responseJson String?
+  fileUrl      String?
+  submittedAt  DateTime?
+  acceptedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id])
+}
+
+// ===== 审计 =====
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  accountId Int?
+  action    String
+  target    String?
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+}
+
+
+/* ========== 文件: server/prisma/seed.ts ========== */
+
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
+const prisma = new PrismaClient();
+
+async function main() {
+  // 1. 园区与企业
+  const park = await prisma.organization.upsert({
+    where: { code: 'PARK-001' },
+    update: {},
+    create: { code: 'PARK-001', name: '示范工业园区', kind: 'park', remark: '初始化数据' }
+  });
+  const ent1 = await prisma.organization.upsert({
+    where: { code: 'ENT-001' },
+    update: {},
+    create: { code: 'ENT-001', name: '新材料制造一厂', parentId: park.id, kind: 'enterprise' }
+  });
+  const ent2 = await prisma.organization.upsert({
+    where: { code: 'ENT-002' },
+    update: {},
+    create: { code: 'ENT-002', name: '精密机械二厂', parentId: park.id, kind: 'enterprise' }
+  });
+
+  // 2. 默认账号
+  const adminHash = await bcrypt.hash('Sjcj@2026', 10);
+  await prisma.account.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: {
+      username: 'admin',
+      passwordHash: adminHash,
+      displayName: '系统管理员',
+      role: 'platform_admin',
+      orgId: park.id,
+      mustChangePwd: false
+    }
+  });
+  const stewardHash = await bcrypt.hash('Steward@2026', 10);
+  await prisma.account.upsert({
+    where: { username: 'steward' },
+    update: {},
+    create: {
+      username: 'steward',
+      passwordHash: stewardHash,
+      displayName: '示例数据员',
+      role: 'data_steward',
+      orgId: ent1.id
+    }
+  });
+  // 单位管理员示例
+  const parkAdminHash = await bcrypt.hash('Parkadmin@2026', 10);
+  await prisma.account.upsert({
+    where: { username: 'parkadmin' },
+    update: {},
+    create: {
+      username: 'parkadmin',
+      passwordHash: parkAdminHash,
+      displayName: '园区管理员',
+      role: 'park_admin',
+      orgId: park.id
+    }
+  });
+  const observerHash = await bcrypt.hash('Observer@2026', 10);
+  await prisma.account.upsert({
+    where: { username: 'observer' },
+    update: {},
+    create: {
+      username: 'observer',
+      passwordHash: observerHash,
+      displayName: '查看账号',
+      role: 'observer',
+      orgId: park.id
+    }
+  });
+
+  // 3. 计量点
+  const meterDefs = [
+    { code: 'M-E-001', name: '一厂总进线电表', energyType: 'electricity', unit: 'kWh', orgId: ent1.id },
+    { code: 'M-E-002', name: '二厂总进线电表', energyType: 'electricity', unit: 'kWh', orgId: ent2.id },
+    { code: 'M-G-001', name: '一厂天然气计量', energyType: 'gas', unit: 'm³', orgId: ent1.id },
+    { code: 'M-W-001', name: '园区自来水总表', energyType: 'water', unit: 't', orgId: park.id },
+    { code: 'M-S-001', name: '一厂蒸汽计量', energyType: 'steam', unit: 't', orgId: ent1.id },
+    { code: 'M-H-001', name: '二厂热力计量', energyType: 'heat', unit: 'GJ', orgId: ent2.id }
+  ];
+  for (const m of meterDefs) {
+    await prisma.meterPoint.upsert({
+      where: { code: m.code },
+      update: {},
+      create: { ...m, mqttTopic: `iecsp/meter/${m.code}/reading` }
+    });
+  }
+
+  // 4. 报警规则
+  await prisma.riskRule.upsert({
+    where: { code: 'R-ELEC-PEAK' },
+    update: {},
+    create: {
+      code: 'R-ELEC-PEAK', name: '电力读数超上限', scope: 'meter', metric: 'value',
+      operator: 'gt', threshold: '5000', severity: 'warning', cooldownSec: 600,
+      remark: '电力计量点 5000 kWh 上限'
+    }
+  });
+  await prisma.riskRule.upsert({
+    where: { code: 'R-QUOTA-OVER' },
+    update: {},
+    create: {
+      code: 'R-QUOTA-OVER', name: '排放配额使用率超过 80%', scope: 'org', metric: 'quota_ratio',
+      operator: 'gt', threshold: '0.8', severity: 'critical', cooldownSec: 3600
+    }
+  });
+
+  // 5. 年度配额示例
+  const year = String(new Date().getUTCFullYear());
+  await prisma.complianceQuota.upsert({
+    where: { period_orgId_source: { period: year, orgId: ent1.id, source: 'government' } },
+    update: {},
+    create: { period: year, orgId: ent1.id, allocated: 1200, source: 'government', remark: '示例配额' }
+  });
+  await prisma.complianceQuota.upsert({
+    where: { period_orgId_source: { period: year, orgId: ent2.id, source: 'government' } },
+    update: {},
+    create: { period: year, orgId: ent2.id, allocated: 800, source: 'government' }
+  });
+
+  console.log('seed done.');
+}
+
+main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

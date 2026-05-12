@@ -7,6 +7,6 @@ const transport = env.NODE_ENV === 'production'
 
 export const logger = pino({
   level: env.LOG_LEVEL,
-  base: { app: 'iecsp-server' },
+  base: { app: 'carbon-server' },
   transport
 });

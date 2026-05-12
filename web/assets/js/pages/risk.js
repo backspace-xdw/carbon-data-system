@@ -6,7 +6,7 @@ import { toast } from '../core/toast.js';
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>风险预警 <small>规则引擎 · 事件流转 · 闭环归档</small></h2></div>
+    <div class="iecsp-page-title"><h2>报警管理 <small>触发规则、处理记录</small></h2></div>
 
     <iecsp-card class="mt-0">
       <div class="iecsp-toolbar">
@@ -31,7 +31,7 @@ export async function render(host) {
       </table>
     </iecsp-card>
 
-    <iecsp-card class="mt-16" title="风险规则" hint="规则触发 → 生成事件,带冷却期">
+    <iecsp-card class="mt-16" title="报警规则" hint="规则触发后生成事件，有冷却时间">
       <div class="iecsp-toolbar"><div class="spacer"></div><button class="iecsp-btn is-primary sm" id="r-add-rule">新增规则</button></div>
       <table class="iecsp-table">
         <thead><tr><th>编号</th><th>名称</th><th>范围</th><th>指标</th><th>条件</th><th>严重度</th><th>启用</th></tr></thead>

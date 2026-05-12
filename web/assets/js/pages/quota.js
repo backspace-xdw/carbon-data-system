@@ -6,7 +6,7 @@ import { toast } from '../core/toast.js';
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>配额履约 <small>年度配额 · 使用进度 · 缺口预警</small></h2></div>
+    <div class="iecsp-page-title"><h2>排放配额 <small>登记年度配额，查看累计使用情况</small></h2></div>
 
     <section class="grid grid-3" id="q-kpis"></section>
 

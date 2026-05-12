@@ -10,7 +10,7 @@ const STATUS_TAG = { pending: 'is-default', submitted: 'is-accent', accepted: 'i
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>监管报送 <small>政府平台通道 · 报送记录 · 回执解析</small></h2></div>
+    <div class="iecsp-page-title"><h2>数据报送 <small>对外报送记录与回执</small></h2></div>
     <iecsp-card>
       <div class="iecsp-toolbar">
         <select class="iecsp-select" id="rp-channel" style="max-width:200px">

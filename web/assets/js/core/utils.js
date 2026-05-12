@@ -49,7 +49,7 @@ export const ENERGY_COLOR = {
   steam: '#c084fc', heat: '#f43f5e', coal: '#9ca3af'
 };
 export const ROLE_LABEL = {
-  platform_admin: '平台管理员', park_admin: '园区管理员', data_steward: '数据员', observer: '观察员'
+  platform_admin: '系统管理员', park_admin: '单位管理员', data_steward: '数据员', observer: '查看人员'
 };
 export const SEVERITY_LABEL = { info: '提示', warning: '警告', critical: '严重' };
 export const SEVERITY_TAG = { info: 'is-info', warning: 'is-warning', critical: 'is-danger' };

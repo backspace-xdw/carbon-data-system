@@ -6,7 +6,7 @@ import { modal } from '../core/modal.js';
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>能源数据接入 <small>历史曲线 · 实时推送 · 手工补录</small></h2></div>
+    <div class="iecsp-page-title"><h2>实时数据 <small>查看历史曲线，必要时可以手工补录</small></h2></div>
 
     <iecsp-card>
       <div class="iecsp-toolbar">
@@ -31,7 +31,7 @@ export async function render(host) {
       <div class="txt-muted mt-12" id="en-stat" style="font-size:12px"></div>
     </iecsp-card>
 
-    <iecsp-card class="mt-16" title="实时推送" hint="WebSocket /ws · 仅显示最近 20 条">
+    <iecsp-card class="mt-16" title="实时数据流" hint="最近 20 条">
       <table class="iecsp-table">
         <thead><tr><th>时间</th><th>计量点</th><th>读数</th></tr></thead>
         <tbody id="en-live"><tr><td colspan="3" class="empty">尚无消息</td></tr></tbody>

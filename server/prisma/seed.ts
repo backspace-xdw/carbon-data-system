@@ -8,7 +8,7 @@ async function main() {
   const park = await prisma.organization.upsert({
     where: { code: 'PARK-001' },
     update: {},
-    create: { code: 'PARK-001', name: '示范工业园区', kind: 'park', remark: '种子数据' }
+    create: { code: 'PARK-001', name: '示范工业园区', kind: 'park', remark: '初始化数据' }
   });
   const ent1 = await prisma.organization.upsert({
     where: { code: 'ENT-001' },
@@ -22,14 +22,14 @@ async function main() {
   });
 
   // 2. 默认账号
-  const adminHash = await bcrypt.hash('Iecsp@2026', 10);
+  const adminHash = await bcrypt.hash('Sjcj@2026', 10);
   await prisma.account.upsert({
     where: { username: 'admin' },
     update: {},
     create: {
       username: 'admin',
       passwordHash: adminHash,
-      displayName: '平台管理员',
+      displayName: '系统管理员',
       role: 'platform_admin',
       orgId: park.id,
       mustChangePwd: false
@@ -47,6 +47,19 @@ async function main() {
       orgId: ent1.id
     }
   });
+  // 单位管理员示例
+  const parkAdminHash = await bcrypt.hash('Parkadmin@2026', 10);
+  await prisma.account.upsert({
+    where: { username: 'parkadmin' },
+    update: {},
+    create: {
+      username: 'parkadmin',
+      passwordHash: parkAdminHash,
+      displayName: '园区管理员',
+      role: 'park_admin',
+      orgId: park.id
+    }
+  });
   const observerHash = await bcrypt.hash('Observer@2026', 10);
   await prisma.account.upsert({
     where: { username: 'observer' },
@@ -54,7 +67,7 @@ async function main() {
     create: {
       username: 'observer',
       passwordHash: observerHash,
-      displayName: '示例观察员',
+      displayName: '查看账号',
       role: 'observer',
       orgId: park.id
     }
@@ -77,21 +90,21 @@ async function main() {
     });
   }
 
-  // 4. 风险规则
+  // 4. 报警规则
   await prisma.riskRule.upsert({
     where: { code: 'R-ELEC-PEAK' },
     update: {},
     create: {
-      code: 'R-ELEC-PEAK', name: '电力瞬时值超限', scope: 'meter', metric: 'value',
+      code: 'R-ELEC-PEAK', name: '电力读数超上限', scope: 'meter', metric: 'value',
       operator: 'gt', threshold: '5000', severity: 'warning', cooldownSec: 600,
-      remark: '默认电力 5000 kWh 上限'
+      remark: '电力计量点 5000 kWh 上限'
     }
   });
   await prisma.riskRule.upsert({
     where: { code: 'R-QUOTA-OVER' },
     update: {},
     create: {
-      code: 'R-QUOTA-OVER', name: '碳配额使用率超 80%', scope: 'org', metric: 'quota_ratio',
+      code: 'R-QUOTA-OVER', name: '排放配额使用率超过 80%', scope: 'org', metric: 'quota_ratio',
       operator: 'gt', threshold: '0.8', severity: 'critical', cooldownSec: 3600
     }
   });

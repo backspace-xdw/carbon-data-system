@@ -6,7 +6,7 @@ import { toast } from '../core/toast.js';
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>计量点台账 <small>表计登记 · MQTT 主题映射 · 有效性管理</small></h2></div>
+    <div class="iecsp-page-title"><h2>计量点管理 <small>登记表计、维护采集主题</small></h2></div>
     <iecsp-card>
       <div class="iecsp-toolbar">
         <select class="iecsp-select" id="m-type" style="max-width:180px">

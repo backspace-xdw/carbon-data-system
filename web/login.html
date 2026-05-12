@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>登录 · 工业能碳协同管控平台</title>
+  <title>登录 - 双碳实时数据采集系统</title>
   <meta name="theme-color" content="#0b1220" />
   <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
   <link rel="stylesheet" href="/assets/css/reset.css" />
@@ -16,42 +16,42 @@
   <main class="login-stage">
     <section class="login-stage__hero" aria-hidden="true">
       <header class="login-hero__brand">
-        <span class="mark">能</span>
+        <span class="mark">碳</span>
         <div>
-          <h1>工业能碳协同管控平台</h1>
-          <small>Industrial Energy-Carbon Synergy Platform</small>
+          <h1>双碳实时数据采集系统</h1>
+          <small>v2.0</small>
         </div>
       </header>
 
       <div class="login-hero__copy">
-        <h2>把每一度电、每一吨气<br/>核算到 CO₂e</h2>
-        <p>面向工业园区与制造企业的能源效率与碳排放协同管控平台。计量 → 核算 → 履约 → 预警 → 报送，闭环可追溯。</p>
+        <h2>从计量到核算<br/>把碳排放算清楚</h2>
+        <p>采集企业电、气、水、蒸汽、热、煤等能源消耗数据，结合排放因子换算为二氧化碳当量，用于内部统计和对外报送。</p>
       </div>
 
       <div class="login-hero__cards">
         <article>
-          <h4>多源接入</h4>
-          <p>电/气/水/蒸汽/热/煤 六类能源,MQTT/HTTP 灵活上送</p>
+          <h4>数据采集</h4>
+          <p>支持 MQTT、HTTP 两种方式上传，常见六类能源都能接入</p>
         </article>
         <article>
-          <h4>因子可配</h4>
-          <p>排放因子库,支持按生效期切换,核算可溯源</p>
+          <h4>排放因子</h4>
+          <p>预置生态环境部因子，也可以自己录入并按生效日期管理</p>
         </article>
         <article>
-          <h4>履约视角</h4>
-          <p>配额按年/按组织绑定,使用进度与缺口实时呈现</p>
+          <h4>配额管理</h4>
+          <p>按年度和企业登记分配额度，能看到累计使用量和剩余</p>
         </article>
         <article>
-          <h4>风险事件流</h4>
-          <p>规则触发→事件流转→闭环归档,审计可查</p>
+          <h4>报警与报送</h4>
+          <p>规则触发后生成事件，处理过程留痕；上报记录可导出</p>
         </article>
       </div>
     </section>
 
     <section class="login-stage__panel">
       <form class="login-form" id="login-form" autocomplete="on" novalidate>
-        <h3>欢迎回来</h3>
-        <p class="lead">请使用平台账号登录</p>
+        <h3>账号登录</h3>
+        <p class="lead">请输入用户名和密码</p>
 
         <label class="iecsp-form-row">
           <span>账号</span>
@@ -68,13 +68,13 @@
         <button class="iecsp-btn is-primary" type="submit" id="login-submit">登 录</button>
 
         <aside class="hint-accounts">
-          <div>开发示例账号:</div>
-          <div><code>admin</code> / <code>Iecsp@2026</code> — 平台管理员</div>
-          <div><code>steward</code> / <code>Steward@2026</code> — 数据员</div>
-          <div><code>observer</code> / <code>Observer@2026</code> — 观察员</div>
+          <div>测试账号（部署后请及时修改）：</div>
+          <div>管理员 <code>admin</code> / <code>Sjcj@2026</code></div>
+          <div>数据员 <code>steward</code> / <code>Steward@2026</code></div>
+          <div>查看 <code>observer</code> / <code>Observer@2026</code></div>
         </aside>
 
-        <p class="login-foot">© IECSP · v2.0</p>
+        <p class="login-foot">双碳实时数据采集系统 v2.0</p>
       </form>
     </section>
   </main>

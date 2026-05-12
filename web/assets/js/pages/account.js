@@ -8,10 +8,10 @@ const ROLE_OPTS = ['platform_admin','park_admin','data_steward','observer'];
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>组织账户 <small>组织树 · 账户 · 审计</small></h2></div>
+    <div class="iecsp-page-title"><h2>用户与组织 <small>组织结构、账户、操作日志</small></h2></div>
 
     <section class="grid grid-2">
-      <iecsp-card title="组织树">
+      <iecsp-card title="组织结构">
         <div class="iecsp-toolbar"><div class="spacer"></div><button class="iecsp-btn is-primary sm" id="ac-add-org">新增组织</button></div>
         <table class="iecsp-table">
           <thead><tr><th>编号</th><th>名称</th><th>类型</th><th>上级</th><th>备注</th></tr></thead>
@@ -28,7 +28,7 @@ export async function render(host) {
       </iecsp-card>
     </section>
 
-    <iecsp-card class="mt-16" title="审计日志" hint="最近 200 条">
+    <iecsp-card class="mt-16" title="操作日志" hint="最近 200 条">
       <table class="iecsp-table">
         <thead><tr><th>时间</th><th>账号</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th></tr></thead>
         <tbody id="ac-audits"></tbody>

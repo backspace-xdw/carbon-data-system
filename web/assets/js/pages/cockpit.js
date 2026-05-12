@@ -1,11 +1,11 @@
-// 能碳驾驶舱
+// 综合总览
 import { api } from '../core/api.js';
 import { fmtNumber, ENERGY_LABEL, ENERGY_COLOR } from '../core/utils.js';
 
 export async function render(host) {
   host.innerHTML = `
     <div class="iecsp-page-title">
-      <h2>能碳驾驶舱 <small>全域 KPI · 实时</small></h2>
+      <h2>综合总览 <small>关键指标和趋势</small></h2>
       <button class="iecsp-btn sm" id="ck-refresh"><span class="iecsp-loading" style="display:none" id="ck-spin"></span> 刷新</button>
     </div>
 

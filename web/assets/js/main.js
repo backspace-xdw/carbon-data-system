@@ -12,23 +12,23 @@ import './components/iecsp-chart.js';
 
 // ===== 路由表 =====
 const NAV = [
-  { group: '运营总览', items: [
-    { path: '/cockpit', title: '能碳驾驶舱', icon: 'cockpit', minRole: 'observer' }
+  { group: '数据看板', items: [
+    { path: '/cockpit', title: '综合总览', icon: 'cockpit', minRole: 'observer' }
   ]},
-  { group: '数据接入', items: [
-    { path: '/energy',  title: '能源数据接入', icon: 'energy', minRole: 'observer' },
-    { path: '/meters',  title: '计量点台账',   icon: 'meter',  minRole: 'observer' }
+  { group: '数据采集', items: [
+    { path: '/energy',  title: '实时数据',  icon: 'energy', minRole: 'observer' },
+    { path: '/meters',  title: '计量点管理', icon: 'meter', minRole: 'observer' }
   ]},
-  { group: '核算履约', items: [
-    { path: '/carbon',  title: '碳足迹核算',   icon: 'leaf',   minRole: 'observer' },
-    { path: '/quota',   title: '配额履约',     icon: 'quota',  minRole: 'observer' }
+  { group: '碳排放管理', items: [
+    { path: '/carbon',  title: '碳排放核算', icon: 'leaf',  minRole: 'observer' },
+    { path: '/quota',   title: '排放配额',   icon: 'quota', minRole: 'observer' }
   ]},
-  { group: '风险与报送', items: [
-    { path: '/risk',    title: '风险预警',     icon: 'risk',   minRole: 'observer' },
-    { path: '/report',  title: '监管报送',     icon: 'report', minRole: 'observer' }
+  { group: '报警与报送', items: [
+    { path: '/risk',    title: '报警管理',  icon: 'risk',   minRole: 'observer' },
+    { path: '/report',  title: '数据报送',  icon: 'report', minRole: 'observer' }
   ]},
-  { group: '组织账户', items: [
-    { path: '/account', title: '组织账户',     icon: 'org',    minRole: 'park_admin' }
+  { group: '系统管理', items: [
+    { path: '/account', title: '用户与组织', icon: 'org',   minRole: 'park_admin' }
   ]}
 ];
 
@@ -43,14 +43,14 @@ const ICON = {
   org:     'M12 3 V9 M6 21 V13 M18 21 V13 M12 9 H6 V13 H18 V9 H12'
 };
 
-defineRoute({ path: '/cockpit', title: '能碳驾驶舱', loader: () => import('./pages/cockpit.js') });
-defineRoute({ path: '/energy',  title: '能源数据接入', loader: () => import('./pages/energy.js') });
-defineRoute({ path: '/meters',  title: '计量点台账',   loader: () => import('./pages/meters.js') });
-defineRoute({ path: '/carbon',  title: '碳足迹核算',   loader: () => import('./pages/carbon.js') });
-defineRoute({ path: '/quota',   title: '配额履约',     loader: () => import('./pages/quota.js') });
-defineRoute({ path: '/risk',    title: '风险预警',     loader: () => import('./pages/risk.js') });
-defineRoute({ path: '/report',  title: '监管报送',     loader: () => import('./pages/report.js') });
-defineRoute({ path: '/account', title: '组织账户',     loader: () => import('./pages/account.js') });
+defineRoute({ path: '/cockpit', title: '综合总览',   loader: () => import('./pages/cockpit.js') });
+defineRoute({ path: '/energy',  title: '实时数据',   loader: () => import('./pages/energy.js') });
+defineRoute({ path: '/meters',  title: '计量点管理', loader: () => import('./pages/meters.js') });
+defineRoute({ path: '/carbon',  title: '碳排放核算', loader: () => import('./pages/carbon.js') });
+defineRoute({ path: '/quota',   title: '排放配额',   loader: () => import('./pages/quota.js') });
+defineRoute({ path: '/risk',    title: '报警管理',   loader: () => import('./pages/risk.js') });
+defineRoute({ path: '/report',  title: '数据报送',   loader: () => import('./pages/report.js') });
+defineRoute({ path: '/account', title: '用户与组织', loader: () => import('./pages/account.js') });
 
 // ===== Boot =====
 (async function boot() {
@@ -103,7 +103,7 @@ function syncNavActive() {
   });
   const route = getRoutes().find(r => r.path === path);
   const crumb = document.getElementById('crumb');
-  if (route) crumb.innerHTML = `<span class="txt-muted">IECSP /</span> <strong>${route.title}</strong>`;
+  if (route) crumb.innerHTML = `<span class="txt-muted">首页 /</span> <strong>${route.title}</strong>`;
 }
 
 function bindHeaderEvents() {

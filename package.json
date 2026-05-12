@@ -1,16 +1,16 @@
 {
-  "name": "iecsp",
+  "name": "carbon-realtime-system",
   "version": "2.0.0",
   "private": true,
-  "description": "工业能碳协同管控平台 Industrial Energy-Carbon Synergy Platform",
+  "description": "双碳实时数据采集系统",
   "workspaces": [
     "server"
   ],
   "scripts": {
-    "dev": "npm run dev -w iecsp-server",
-    "build": "npm run build -w iecsp-server",
-    "start": "npm run start -w iecsp-server",
-    "seed": "npm run seed -w iecsp-server",
-    "migrate": "npm run prisma:migrate -w iecsp-server"
+    "dev": "npm run dev -w carbon-server",
+    "build": "npm run build -w carbon-server",
+    "start": "npm run start -w carbon-server",
+    "seed": "npm run seed -w carbon-server",
+    "migrate": "npm run prisma:migrate -w carbon-server"
   }
 }

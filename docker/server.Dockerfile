@@ -5,8 +5,8 @@ COPY server/package.json server/tsconfig.json server/
 COPY server/prisma server/prisma
 RUN npm install --workspaces --include-workspace-root
 COPY server/src server/src
-RUN npm run prisma:generate -w iecsp-server \
- && npm run build -w iecsp-server
+RUN npm run prisma:generate -w carbon-server \
+ && npm run build -w carbon-server
 
 FROM node:20-alpine
 WORKDIR /app

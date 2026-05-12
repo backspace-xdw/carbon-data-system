@@ -1,0 +1,2851 @@
+/* ========== 文件: web/index.html ========== */
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>双碳实时数据采集系统</title>
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
+  <link rel="stylesheet" href="/assets/css/reset.css" />
+  <link rel="stylesheet" href="/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+</head>
+<body>
+  <div class="iecsp-shell">
+    <aside class="iecsp-side">
+      <div class="iecsp-side__brand">
+        <span class="mark">碳</span>
+        <div>
+          <h1>双碳数据采集</h1>
+          <small>v2.0</small>
+        </div>
+      </div>
+      <nav class="iecsp-nav" id="nav-root"></nav>
+    </aside>
+
+    <header class="iecsp-top">
+      <div class="iecsp-top__crumb" id="crumb"></div>
+      <div class="iecsp-top__spacer"></div>
+      <button class="iecsp-top__action" id="btn-toast" title="实时连接状态" aria-label="实时连接">
+        <span id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--fg-dim);display:inline-block"></span>
+      </button>
+      <div class="iecsp-top__profile" id="profile">
+        <span class="avatar" id="avatar">·</span>
+        <span id="profile-name" class="txt-muted">…</span>
+      </div>
+      <button class="iecsp-btn is-ghost sm" id="btn-logout">退出</button>
+    </header>
+
+    <main class="iecsp-main" id="view-host">
+      <div style="padding:48px 0;text-align:center;color:var(--fg-dim)">
+        <span class="iecsp-loading"></span>&nbsp;&nbsp;载入中…
+      </div>
+    </main>
+  </div>
+
+  <div class="iecsp-toasts" id="toasts"></div>
+  <div id="modal-host"></div>
+
+  <script type="module" src="/assets/js/main.js"></script>
+</body>
+</html>
+
+
+/* ========== 文件: web/login.html ========== */
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>登录 - 双碳实时数据采集系统</title>
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
+  <link rel="stylesheet" href="/assets/css/reset.css" />
+  <link rel="stylesheet" href="/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/login.css" />
+</head>
+<body>
+  <main class="login-stage">
+    <section class="login-stage__hero" aria-hidden="true">
+      <header class="login-hero__brand">
+        <span class="mark">碳</span>
+        <div>
+          <h1>双碳实时数据采集系统</h1>
+          <small>v2.0</small>
+        </div>
+      </header>
+
+      <div class="login-hero__copy">
+        <h2>从计量到核算<br/>把碳排放算清楚</h2>
+        <p>采集企业电、气、水、蒸汽、热、煤等能源消耗数据，结合排放因子换算为二氧化碳当量，用于内部统计和对外报送。</p>
+      </div>
+
+      <div class="login-hero__cards">
+        <article>
+          <h4>数据采集</h4>
+          <p>支持 MQTT、HTTP 两种方式上传，常见六类能源都能接入</p>
+        </article>
+        <article>
+          <h4>排放因子</h4>
+          <p>预置生态环境部因子，也可以自己录入并按生效日期管理</p>
+        </article>
+        <article>
+          <h4>配额管理</h4>
+          <p>按年度和企业登记分配额度，能看到累计使用量和剩余</p>
+        </article>
+        <article>
+          <h4>报警与报送</h4>
+          <p>规则触发后生成事件，处理过程留痕；上报记录可导出</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="login-stage__panel">
+      <form class="login-form" id="login-form" autocomplete="on" novalidate>
+        <h3>账号登录</h3>
+        <p class="lead">请输入用户名和密码</p>
+
+        <label class="iecsp-form-row">
+          <span>账号</span>
+          <input class="iecsp-input" type="text" name="username" required autocomplete="username" placeholder="admin / steward / observer" />
+        </label>
+
+        <label class="iecsp-form-row">
+          <span>密码</span>
+          <input class="iecsp-input" type="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+        </label>
+
+        <div class="err" id="login-err" hidden></div>
+
+        <button class="iecsp-btn is-primary" type="submit" id="login-submit">登 录</button>
+
+        <aside class="hint-accounts">
+          <div>测试账号（部署后请及时修改）：</div>
+          <div>管理员 <code>admin</code> / <code>Sjcj@2026</code></div>
+          <div>数据员 <code>steward</code> / <code>Steward@2026</code></div>
+          <div>查看 <code>observer</code> / <code>Observer@2026</code></div>
+        </aside>
+
+        <p class="login-foot">双碳实时数据采集系统 v2.0</p>
+      </form>
+    </section>
+  </main>
+
+  <script type="module">
+    import { api, setToken } from '/assets/js/core/api.js';
+
+    const form = document.getElementById('login-form');
+    const err = document.getElementById('login-err');
+    const submit = document.getElementById('login-submit');
+
+    if (localStorage.getItem('iecsp.token')) {
+      location.replace('/');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      const fd = new FormData(form);
+      const username = String(fd.get('username') || '').trim();
+      const password = String(fd.get('password') || '');
+      if (!username || password.length < 6) {
+        err.textContent = '账号或密码格式不正确';
+        err.hidden = false;
+        return;
+      }
+      submit.disabled = true;
+      submit.innerHTML = '<span class="iecsp-loading"></span> 登录中…';
+      try {
+        const res = await api('/auth/login', { method: 'POST', body: { username, password } });
+        setToken(res.data.token);
+        location.replace('/');
+      } catch (ex) {
+        err.textContent = ex.message || '登录失败';
+        err.hidden = false;
+      } finally {
+        submit.disabled = false;
+        submit.textContent = '登 录';
+      }
+    });
+  </script>
+</body>
+</html>
+
+
+/* ========== 文件: web/assets/css/reset.css ========== */
+
+/* IECSP — CSS 重置 */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+img, svg, canvas { display: block; max-width: 100%; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; }
+a { color: inherit; text-decoration: none; }
+ul, ol { list-style: none; }
+table { border-collapse: collapse; width: 100%; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.35); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.55); }
+
+
+/* ========== 文件: web/assets/css/tokens.css ========== */
+
+/* IECSP 设计令牌 */
+
+:root {
+  /* 色板 — 暗色工业主题 */
+  --bg: #0b1220;
+  --bg-2: #0f1a2c;
+  --surface: #142235;
+  --surface-2: #1a2c45;
+  --surface-hi: #213a59;
+  --border: rgba(148, 163, 184, 0.18);
+  --border-hi: rgba(148, 163, 184, 0.4);
+
+  --fg: #e2e8f0;
+  --fg-muted: #94a3b8;
+  --fg-dim: #64748b;
+
+  --primary: #22c55e;        /* 碳绿 */
+  --primary-soft: rgba(34, 197, 94, 0.16);
+  --accent: #3b82f6;         /* 能蓝 */
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --warning: #f59e0b;
+  --warning-soft: rgba(245, 158, 11, 0.18);
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, 0.18);
+  --info: #06b6d4;
+  --info-soft: rgba(6, 182, 212, 0.18);
+
+  /* 能源类型色卡 */
+  --c-electricity: #facc15;
+  --c-gas:         #f97316;
+  --c-water:       #38bdf8;
+  --c-steam:       #c084fc;
+  --c-heat:        #f43f5e;
+  --c-coal:        #6b7280;
+
+  /* 阴影 / 圆角 / 间距 */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 4px 18px rgba(0, 0, 0, 0.35);
+  --radius: 8px;
+  --radius-lg: 14px;
+  --gutter: 16px;
+  --gutter-lg: 24px;
+
+  /* 拓扑 */
+  --side-w: 232px;
+  --top-h: 56px;
+}
+
+
+/* ========== 文件: web/assets/css/layout.css ========== */
+
+/* IECSP 布局 */
+
+.iecsp-shell {
+  display: grid;
+  grid-template-columns: var(--side-w) 1fr;
+  grid-template-rows: var(--top-h) 1fr;
+  grid-template-areas: "side top" "side main";
+  height: 100vh;
+}
+
+.iecsp-side {
+  grid-area: side;
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.iecsp-side__brand {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.iecsp-side__brand .mark {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  display: grid; place-items: center;
+  color: #0b1220; font-weight: 700;
+}
+.iecsp-side__brand h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
+.iecsp-side__brand small { color: var(--fg-muted); font-size: 11px; }
+
+.iecsp-nav { flex: 1; overflow-y: auto; padding: 12px 8px; }
+.iecsp-nav__group { margin-bottom: 8px; }
+.iecsp-nav__title {
+  padding: 8px 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--fg-dim);
+}
+.iecsp-nav__item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  margin: 2px 0;
+  border-radius: 6px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.iecsp-nav__item:hover { background: var(--surface); color: var(--fg); }
+.iecsp-nav__item.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.iecsp-nav__item .icon { width: 18px; height: 18px; flex: 0 0 18px; opacity: 0.9; }
+
+.iecsp-top {
+  grid-area: top;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+}
+.iecsp-top__crumb { color: var(--fg-muted); font-size: 13px; }
+.iecsp-top__crumb strong { color: var(--fg); font-weight: 600; }
+.iecsp-top__spacer { flex: 1; }
+.iecsp-top__action {
+  width: 36px; height: 36px; border-radius: 6px;
+  display: grid; place-items: center;
+  color: var(--fg-muted);
+}
+.iecsp-top__action:hover { background: var(--surface); color: var(--fg); }
+.iecsp-top__action .badge {
+  position: absolute; top: 6px; right: 6px;
+  background: var(--danger); color: #fff; font-size: 10px;
+  border-radius: 9px; padding: 0 5px;
+}
+.iecsp-top__profile {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.iecsp-top__profile .avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  display: grid; place-items: center;
+  color: #0b1220; font-weight: 700; font-size: 12px;
+}
+
+.iecsp-main {
+  grid-area: main;
+  overflow: auto;
+  padding: var(--gutter-lg);
+  background: var(--bg);
+}
+
+.iecsp-page-title {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin-bottom: var(--gutter);
+}
+.iecsp-page-title h2 { font-size: 18px; font-weight: 600; }
+.iecsp-page-title small { color: var(--fg-muted); margin-left: 12px; font-size: 12px; }
+
+.grid { display: grid; gap: var(--gutter); }
+.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-2-1 { grid-template-columns: 2fr 1fr; }
+.grid-1-1-1 { grid-template-columns: 1fr 1fr 1fr; }
+
+@media (max-width: 1080px) {
+  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-2-1 { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .iecsp-shell { grid-template-columns: 0 1fr; }
+  .iecsp-side { display: none; }
+  .grid-4, .grid-3, .grid-2, .grid-2-1, .grid-1-1-1 { grid-template-columns: 1fr; }
+}
+
+
+/* ========== 文件: web/assets/css/components.css ========== */
+
+/* IECSP 组件样式 */
+
+.iecsp-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-1);
+}
+.iecsp-card__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.iecsp-card__title { font-size: 14px; font-weight: 600; color: var(--fg); }
+.iecsp-card__hint { font-size: 12px; color: var(--fg-muted); }
+.iecsp-card__body { color: var(--fg); }
+
+/* KPI 卡片 */
+.iecsp-kpi { display: flex; flex-direction: column; gap: 8px; }
+.iecsp-kpi__label { font-size: 12px; color: var(--fg-muted); letter-spacing: 0.4px; }
+.iecsp-kpi__value { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+.iecsp-kpi__value .unit { font-size: 13px; color: var(--fg-muted); margin-left: 4px; font-weight: 500; }
+.iecsp-kpi__delta { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.iecsp-kpi__delta.up { color: var(--danger); }
+.iecsp-kpi__delta.down { color: var(--primary); }
+.iecsp-kpi__hint { font-size: 11px; color: var(--fg-dim); }
+
+/* 标签 */
+.iecsp-tag {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+.iecsp-tag.is-default  { background: var(--surface-hi); color: var(--fg-muted); }
+.iecsp-tag.is-primary  { background: var(--primary-soft); color: var(--primary); }
+.iecsp-tag.is-accent   { background: var(--accent-soft); color: var(--accent); }
+.iecsp-tag.is-warning  { background: var(--warning-soft); color: var(--warning); }
+.iecsp-tag.is-danger   { background: var(--danger-soft); color: var(--danger); }
+.iecsp-tag.is-info     { background: var(--info-soft); color: var(--info); }
+
+/* 按钮 */
+.iecsp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hi);
+  color: var(--fg);
+  background: var(--surface);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  font-size: 13px;
+}
+.iecsp-btn:hover { background: var(--surface-hi); border-color: rgba(148, 163, 184, 0.55); }
+.iecsp-btn.is-primary { background: var(--primary); border-color: var(--primary); color: #08110a; font-weight: 600; }
+.iecsp-btn.is-primary:hover { background: #16a34a; }
+.iecsp-btn.is-accent { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.iecsp-btn.is-accent:hover { background: #2563eb; }
+.iecsp-btn.is-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.iecsp-btn.is-ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+.iecsp-btn.is-ghost:hover { background: var(--surface); color: var(--fg); }
+.iecsp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.iecsp-btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+
+/* 输入 */
+.iecsp-input, .iecsp-select, .iecsp-textarea {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hi);
+  background: var(--bg-2);
+  color: var(--fg);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.iecsp-textarea { height: auto; padding: 8px 12px; min-height: 80px; resize: vertical; }
+.iecsp-input:focus, .iecsp-select:focus, .iecsp-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.iecsp-form-row { display: flex; flex-direction: column; gap: 6px; }
+.iecsp-form-row label { font-size: 12px; color: var(--fg-muted); }
+.iecsp-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 720px) { .iecsp-form-grid { grid-template-columns: 1fr; } }
+
+/* 表格 */
+.iecsp-table { width: 100%; }
+.iecsp-table thead th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.iecsp-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.iecsp-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+.iecsp-table tbody tr:last-child td { border-bottom: none; }
+.iecsp-table .action-col { width: 1%; white-space: nowrap; }
+.iecsp-table .empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--fg-dim);
+}
+
+/* 工具栏 */
+.iecsp-toolbar {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.iecsp-toolbar .spacer { flex: 1; }
+
+/* 模态 */
+.iecsp-modal {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(2, 8, 23, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 80;
+  padding: 24px;
+}
+.iecsp-modal__panel {
+  width: min(560px, 100%);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.iecsp-modal__head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.iecsp-modal__body { padding: 18px; max-height: 60vh; overflow-y: auto; }
+.iecsp-modal__foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+
+/* 通知 */
+.iecsp-toasts {
+  position: fixed; right: 16px; bottom: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 200;
+}
+.iecsp-toast {
+  min-width: 280px;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: var(--shadow-2);
+  animation: toast-in 0.2s ease;
+}
+.iecsp-toast.is-success { border-left-color: var(--primary); }
+.iecsp-toast.is-warning { border-left-color: var(--warning); }
+.iecsp-toast.is-danger  { border-left-color: var(--danger); }
+@keyframes toast-in { from { transform: translateX(20px); opacity: 0; } }
+
+/* 加载 */
+.iecsp-loading {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border-hi);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 进度条 */
+.iecsp-bar {
+  position: relative;
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.iecsp-bar > span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 0.4s ease;
+}
+.iecsp-bar.is-warning > span { background: linear-gradient(90deg, var(--warning), var(--danger)); }
+
+/* 通用排版 */
+.txt-muted { color: var(--fg-muted); }
+.txt-dim   { color: var(--fg-dim); }
+.mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; } .mt-24 { margin-top: 24px; }
+.flex { display: flex; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.gap-8 { gap: 8px; } .gap-12 { gap: 12px; } .gap-16 { gap: 16px; }
+
+
+/* ========== 文件: web/assets/css/login.css ========== */
+
+/* IECSP 登录页样式 */
+
+.login-stage {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  background: radial-gradient(1200px 600px at 80% -10%, rgba(34, 197, 94, 0.18), transparent 60%),
+              radial-gradient(900px 500px at -10% 90%, rgba(59, 130, 246, 0.2), transparent 60%),
+              var(--bg);
+}
+@media (max-width: 880px) { .login-stage { grid-template-columns: 1fr; } }
+
+.login-stage__hero {
+  position: relative;
+  padding: 56px 60px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  border-right: 1px solid var(--border);
+}
+@media (max-width: 880px) { .login-stage__hero { display: none; } }
+
+.login-hero__brand {
+  display: flex; align-items: center; gap: 12px;
+}
+.login-hero__brand .mark {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  display: grid; place-items: center;
+  color: #0b1220; font-weight: 800;
+  font-size: 18px;
+}
+.login-hero__brand h1 { font-size: 16px; font-weight: 600; }
+.login-hero__brand small { color: var(--fg-muted); font-size: 12px; }
+
+.login-hero__copy { margin: 0 0 24px; }
+.login-hero__copy h2 {
+  font-size: 36px; line-height: 1.25; font-weight: 700;
+  letter-spacing: 0.5px;
+  background: linear-gradient(90deg, #fff, #94a3b8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.login-hero__copy p {
+  color: var(--fg-muted);
+  font-size: 14px;
+  margin-top: 12px;
+  max-width: 460px;
+}
+
+.login-hero__cards {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.login-hero__cards article {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(20, 34, 53, 0.5);
+  backdrop-filter: blur(4px);
+}
+.login-hero__cards h4 { font-size: 13px; font-weight: 600; color: var(--fg); }
+.login-hero__cards p  { font-size: 12px; color: var(--fg-muted); margin-top: 4px; }
+
+.login-stage__panel {
+  padding: 64px 56px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.login-form { max-width: 360px; width: 100%; margin: 0 auto; }
+.login-form h3 { font-size: 22px; font-weight: 600; }
+.login-form p.lead { color: var(--fg-muted); font-size: 13px; margin-top: 6px; }
+.login-form .iecsp-form-row { margin-top: 18px; }
+.login-form .iecsp-btn { width: 100%; height: 40px; margin-top: 22px; }
+.login-form .err {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
+  border-left: 3px solid var(--danger);
+}
+.login-form .hint-accounts {
+  margin-top: 28px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px dashed var(--border-hi);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--fg-muted);
+  line-height: 1.7;
+}
+.login-form .hint-accounts code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--fg);
+}
+
+.login-foot {
+  margin-top: 36px;
+  color: var(--fg-dim);
+  font-size: 12px;
+  text-align: center;
+}
+
+
+/* ========== 文件: web/assets/js/main.js ========== */
+
+// 应用入口
+
+import { api, clearToken, getToken } from './core/api.js';
+import { defineRoute, start, getRoutes } from './core/router.js';
+import { connect as wsConnect } from './core/realtime.js';
+import { store } from './core/store.js';
+import { toast } from './core/toast.js';
+import { SEVERITY_LABEL } from './core/utils.js';
+
+import './components/iecsp-card.js';
+import './components/iecsp-chart.js';
+
+// ===== 路由表 =====
+const NAV = [
+  { group: '数据看板', items: [
+    { path: '/cockpit', title: '综合总览', icon: 'cockpit', minRole: 'observer' }
+  ]},
+  { group: '数据采集', items: [
+    { path: '/energy',  title: '实时数据',  icon: 'energy', minRole: 'observer' },
+    { path: '/meters',  title: '计量点管理', icon: 'meter', minRole: 'observer' }
+  ]},
+  { group: '碳排放管理', items: [
+    { path: '/carbon',  title: '碳排放核算', icon: 'leaf',  minRole: 'observer' },
+    { path: '/quota',   title: '排放配额',   icon: 'quota', minRole: 'observer' }
+  ]},
+  { group: '报警与报送', items: [
+    { path: '/risk',    title: '报警管理',  icon: 'risk',   minRole: 'observer' },
+    { path: '/report',  title: '数据报送',  icon: 'report', minRole: 'observer' }
+  ]},
+  { group: '系统管理', items: [
+    { path: '/account', title: '用户与组织', icon: 'org',   minRole: 'park_admin' }
+  ]}
+];
+
+const ICON = {
+  cockpit: 'M3 12 L12 4 L21 12 V20 H14 V14 H10 V20 H3 Z',
+  energy:  'M13 2 L4 14 H11 L9 22 L20 10 H13 Z',
+  meter:   'M4 4 H20 V20 H4 Z M4 9 H20 M9 9 V20 M15 9 V20',
+  leaf:    'M5 19 C5 11 11 5 19 5 C19 13 13 19 5 19 Z M5 19 L12 12',
+  quota:   'M4 20 V12 H8 V20 Z M10 20 V8 H14 V20 Z M16 20 V14 H20 V20 Z',
+  risk:    'M12 3 L22 21 H2 Z M12 10 V14 M12 17 V18',
+  report:  'M6 3 H16 L20 7 V21 H6 Z M14 3 V8 H20',
+  org:     'M12 3 V9 M6 21 V13 M18 21 V13 M12 9 H6 V13 H18 V9 H12'
+};
+
+defineRoute({ path: '/cockpit', title: '综合总览',   loader: () => import('./pages/cockpit.js') });
+defineRoute({ path: '/energy',  title: '实时数据',   loader: () => import('./pages/energy.js') });
+defineRoute({ path: '/meters',  title: '计量点管理', loader: () => import('./pages/meters.js') });
+defineRoute({ path: '/carbon',  title: '碳排放核算', loader: () => import('./pages/carbon.js') });
+defineRoute({ path: '/quota',   title: '排放配额',   loader: () => import('./pages/quota.js') });
+defineRoute({ path: '/risk',    title: '报警管理',   loader: () => import('./pages/risk.js') });
+defineRoute({ path: '/report',  title: '数据报送',   loader: () => import('./pages/report.js') });
+defineRoute({ path: '/account', title: '用户与组织', loader: () => import('./pages/account.js') });
+
+// ===== Boot =====
+(async function boot() {
+  if (!getToken()) { location.replace('/login.html'); return; }
+  try {
+    const res = await api('/auth/me');
+    store.set({ profile: res.data });
+    renderProfile(res.data);
+    renderNav(res.data);
+  } catch (e) {
+    location.replace('/login.html');
+    return;
+  }
+  start('#view-host');
+  wsConnect();
+  bindHeaderEvents();
+  bindWsEvents();
+})();
+
+function renderProfile(p) {
+  document.getElementById('profile-name').textContent = `${p.displayName}`;
+  document.getElementById('profile-name').classList.remove('txt-muted');
+  document.getElementById('avatar').textContent = (p.displayName || '·').charAt(0);
+}
+
+function renderNav(profile) {
+  const root = document.getElementById('nav-root');
+  const ROLE_RANK = { platform_admin: 100, park_admin: 70, data_steward: 40, observer: 10 };
+  const my = ROLE_RANK[profile.role] || 0;
+  const html = NAV.map(g => {
+    const items = g.items.filter(it => my >= (ROLE_RANK[it.minRole] || 0));
+    if (!items.length) return '';
+    return `<div class="iecsp-nav__group">
+      <div class="iecsp-nav__title">${g.group}</div>
+      ${items.map(it => `<a class="iecsp-nav__item" data-path="${it.path}" href="#${it.path}">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${ICON[it.icon] || ''}"/></svg>
+        <span>${it.title}</span>
+      </a>`).join('')}
+    </div>`;
+  }).join('');
+  root.innerHTML = html;
+  syncNavActive();
+  window.addEventListener('iecsp:route', syncNavActive);
+}
+
+function syncNavActive() {
+  const path = (location.hash || '#/cockpit').slice(1);
+  document.querySelectorAll('.iecsp-nav__item').forEach(el => {
+    el.classList.toggle('is-active', el.getAttribute('data-path') === path);
+  });
+  const route = getRoutes().find(r => r.path === path);
+  const crumb = document.getElementById('crumb');
+  if (route) crumb.innerHTML = `<span class="txt-muted">首页 /</span> <strong>${route.title}</strong>`;
+}
+
+function bindHeaderEvents() {
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    try { await api('/auth/logout', { method: 'POST' }); } catch {}
+    clearToken();
+    location.replace('/login.html');
+  });
+}
+
+function bindWsEvents() {
+  const dot = document.getElementById('ws-dot');
+  const apply = (ok) => { dot.style.background = ok ? 'var(--primary)' : 'var(--fg-dim)'; };
+  apply(false);
+  window.addEventListener('iecsp:ws', (e) => apply(e.detail.ready));
+  window.addEventListener('iecsp:ws:risk', (e) => {
+    const ev = e.detail || {};
+    toast(`【${SEVERITY_LABEL[ev.severity] || ''}】${ev.message || '新的风险事件'}`, ev.severity === 'critical' ? 'danger' : 'warning', 5000);
+  });
+}
+
+
+/* ========== 文件: web/assets/js/core/api.js ========== */
+
+// API 客户端 — 原生 fetch 封装,统一错误处理,自动注入 Bearer Token
+// 约定:接口返回 { ok: boolean, data?: T, message?: string, error?: string }
+
+const TOKEN_KEY = 'iecsp.token';
+
+export const apiBase = '/api/v1';
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+export function clearToken() { setToken(null); }
+
+export async function api(path, opts = {}) {
+  const url = apiBase + path;
+  const method = (opts.method || 'GET').toUpperCase();
+  const headers = {
+    'Accept': 'application/json',
+    ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(opts.headers || {})
+  };
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: 'same-origin',
+      signal: opts.signal
+    });
+  } catch (e) {
+    throw new ApiError('network_error', '网络异常,请稍后再试', 0);
+  }
+  const text = await res.text();
+  let json;
+  try { json = text ? JSON.parse(text) : {}; } catch { json = {}; }
+
+  if (res.status === 401) {
+    clearToken();
+    if (location.pathname !== '/login.html') location.replace('/login.html');
+    throw new ApiError('unauthorized', '会话已过期', 401);
+  }
+
+  if (!res.ok || json.ok === false) {
+    throw new ApiError(json.error || 'error', json.message || `HTTP ${res.status}`, res.status);
+  }
+  return json;
+}
+
+export class ApiError extends Error {
+  constructor(code, message, status) {
+    super(message);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+// 便捷 fetch 模板字符串
+export function qs(params = {}) {
+  const e = Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '');
+  if (!e.length) return '';
+  return '?' + new URLSearchParams(e.map(([k, v]) => [k, String(v)])).toString();
+}
+
+
+/* ========== 文件: web/assets/js/core/router.js ========== */
+
+// Hash 路由 — /#/cockpit 形式
+// 每条路由:{ path, title, loader: () => Promise<{render(host, ctx), dispose?}> }
+
+const routes = [];
+let current = null;
+
+export function defineRoute(def) { routes.push(def); }
+
+export function getRoutes() { return [...routes]; }
+
+export function start(hostSelector) {
+  const host = document.querySelector(hostSelector);
+  const dispatch = async () => {
+    const hash = location.hash || '#/cockpit';
+    const path = hash.startsWith('#') ? hash.slice(1) : hash;
+    const route = routes.find(r => r.path === path) || routes[0];
+    if (current && current.dispose) {
+      try { current.dispose(); } catch (e) { console.warn('dispose error', e); }
+    }
+    document.title = (route.title || '首页') + ' - 双碳实时数据采集系统';
+    host.innerHTML = '<div style="padding:48px 0;text-align:center;color:var(--fg-dim)"><span class="iecsp-loading"></span>&nbsp;&nbsp;载入中…</div>';
+    try {
+      const mod = await route.loader();
+      current = await mod.render(host, { route });
+      window.dispatchEvent(new CustomEvent('iecsp:route', { detail: { path: route.path, title: route.title } }));
+    } catch (e) {
+      console.error(e);
+      host.innerHTML = `<div class="iecsp-card"><h3 style="color:var(--danger)">页面载入失败</h3><pre style="white-space:pre-wrap;color:var(--fg-muted);margin-top:12px">${(e && e.message) || e}</pre></div>`;
+    }
+  };
+  window.addEventListener('hashchange', dispatch);
+  dispatch();
+}
+
+export function go(path) {
+  if (!path.startsWith('/')) path = '/' + path;
+  location.hash = '#' + path;
+}
+
+
+/* ========== 文件: web/assets/js/core/store.js ========== */
+
+// 极简发布订阅状态容器(替代 Vuex/Redux)
+
+export function createStore(initial = {}) {
+  let state = { ...initial };
+  const subs = new Set();
+  return {
+    get state() { return state; },
+    set(patch) {
+      state = { ...state, ...(typeof patch === 'function' ? patch(state) : patch) };
+      for (const fn of subs) fn(state);
+    },
+    subscribe(fn) {
+      subs.add(fn);
+      fn(state);
+      return () => subs.delete(fn);
+    }
+  };
+}
+
+// 全局 store
+export const store = createStore({
+  profile: null,
+  wsReady: false,
+  toasts: []
+});
+
+
+/* ========== 文件: web/assets/js/core/realtime.js ========== */
+
+// WebSocket 实时通道 — 自动重连,广播自定义事件
+
+let socket = null;
+let retryTimer = null;
+let retryDelay = 1500;
+
+export function connect() {
+  const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+  try { socket = new WebSocket(url); } catch { schedule(); return; }
+  socket.addEventListener('open', () => {
+    retryDelay = 1500;
+    window.dispatchEvent(new CustomEvent('iecsp:ws', { detail: { ready: true } }));
+  });
+  socket.addEventListener('close', () => {
+    window.dispatchEvent(new CustomEvent('iecsp:ws', { detail: { ready: false } }));
+    schedule();
+  });
+  socket.addEventListener('error', () => {
+    try { socket.close(); } catch {}
+  });
+  socket.addEventListener('message', (ev) => {
+    try {
+      const m = JSON.parse(ev.data);
+      window.dispatchEvent(new CustomEvent('iecsp:ws:' + m.type, { detail: m.payload }));
+    } catch (e) { /* ignore non-json */ }
+  });
+}
+
+function schedule() {
+  if (retryTimer) return;
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    retryDelay = Math.min(retryDelay * 1.5, 15000);
+    connect();
+  }, retryDelay);
+}
+
+export function disconnect() {
+  if (socket) { try { socket.close(); } catch {} socket = null; }
+}
+
+
+/* ========== 文件: web/assets/js/core/toast.js ========== */
+
+// 轻量通知
+
+export function toast(message, type = 'info', ttl = 3200) {
+  const host = document.getElementById('toasts') || document.body;
+  const el = document.createElement('div');
+  el.className = 'iecsp-toast is-' + type;
+  el.textContent = message;
+  host.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity .2s, transform .2s';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(20px)';
+    setTimeout(() => el.remove(), 200);
+  }, ttl);
+}
+
+
+/* ========== 文件: web/assets/js/core/modal.js ========== */
+
+// 极简模态对话框
+
+export function modal({ title, body, confirmText = '确定', cancelText = '取消', danger = false, onConfirm }) {
+  return new Promise((resolve) => {
+    const host = document.getElementById('modal-host') || document.body;
+    const wrap = document.createElement('div');
+    wrap.className = 'iecsp-modal';
+    wrap.innerHTML = `
+      <div class="iecsp-modal__panel" role="dialog" aria-modal="true">
+        <div class="iecsp-modal__head">
+          <strong>${title || ''}</strong>
+          <button class="iecsp-btn is-ghost sm" data-act="close" aria-label="关闭">✕</button>
+        </div>
+        <div class="iecsp-modal__body"></div>
+        <div class="iecsp-modal__foot">
+          <button class="iecsp-btn" data-act="cancel">${cancelText}</button>
+          <button class="iecsp-btn ${danger ? 'is-danger' : 'is-primary'}" data-act="confirm">${confirmText}</button>
+        </div>
+      </div>`;
+    const bodyEl = wrap.querySelector('.iecsp-modal__body');
+    if (typeof body === 'string') bodyEl.innerHTML = body;
+    else if (body instanceof Node) bodyEl.appendChild(body);
+    host.appendChild(wrap);
+
+    const close = (ret) => { wrap.remove(); resolve(ret); };
+    wrap.addEventListener('click', async (e) => {
+      const t = e.target.closest('[data-act]');
+      if (!t) { if (e.target === wrap) close(false); return; }
+      const act = t.getAttribute('data-act');
+      if (act === 'close' || act === 'cancel') return close(false);
+      if (act === 'confirm') {
+        if (onConfirm) {
+          try {
+            const r = await onConfirm(wrap);
+            if (r === false) return;
+          } catch (err) { return; }
+        }
+        close(true);
+      }
+    });
+    wrap.querySelector('[data-act="close"]').focus();
+  });
+}
+
+
+/* ========== 文件: web/assets/js/core/db.js ========== */
+
+// 极薄 IndexedDB 封装 — 用于离线缓存最近一次驾驶舱与列表数据
+
+const DB_NAME = 'iecsp-cache';
+const VER = 1;
+const STORES = ['kv', 'series'];
+
+function open() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, VER);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      for (const s of STORES) {
+        if (!db.objectStoreNames.contains(s)) db.createObjectStore(s);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function tx(store, mode, fn) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(store, mode);
+    const s = t.objectStore(store);
+    const r = fn(s);
+    t.oncomplete = () => resolve(r && 'result' in r ? r.result : undefined);
+    t.onerror = () => reject(t.error);
+  });
+}
+
+export const idb = {
+  async set(key, value) { return tx('kv', 'readwrite', s => s.put(value, key)); },
+  async get(key)        { return tx('kv', 'readonly', s => s.get(key)).then(v => v ?? null).catch(() => null); },
+  async del(key)        { return tx('kv', 'readwrite', s => s.delete(key)); }
+};
+
+
+/* ========== 文件: web/assets/js/core/utils.js ========== */
+
+// 实用工具
+
+export function fmtNumber(n, decimals = 2) {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—';
+  const v = Number(n);
+  if (Math.abs(v) >= 10000) return (v / 10000).toFixed(decimals) + ' 万';
+  return v.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+export function fmtTime(s, withSec = false) {
+  if (!s) return '—';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '—';
+  const pad = (x) => String(x).padStart(2, '0');
+  const base = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return withSec ? `${base}:${pad(d.getSeconds())}` : base;
+}
+
+export function ago(s) {
+  if (!s) return '—';
+  const t = new Date(s).getTime();
+  const diff = Math.max(0, Date.now() - t);
+  if (diff < 60_000)       return Math.floor(diff / 1000) + ' 秒前';
+  if (diff < 3_600_000)    return Math.floor(diff / 60_000) + ' 分钟前';
+  if (diff < 86_400_000)   return Math.floor(diff / 3_600_000) + ' 小时前';
+  return Math.floor(diff / 86_400_000) + ' 天前';
+}
+
+export function debounce(fn, wait = 250) {
+  let h;
+  return (...args) => { clearTimeout(h); h = setTimeout(() => fn(...args), wait); };
+}
+
+export function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+export const ENERGY_LABEL = {
+  electricity: '电力', gas: '天然气', water: '水', steam: '蒸汽', heat: '热力', coal: '原煤'
+};
+export const ENERGY_UNIT = {
+  electricity: 'kWh', gas: 'm³', water: 't', steam: 't', heat: 'GJ', coal: 't'
+};
+export const ENERGY_COLOR = {
+  electricity: '#facc15', gas: '#f97316', water: '#38bdf8',
+  steam: '#c084fc', heat: '#f43f5e', coal: '#9ca3af'
+};
+export const ROLE_LABEL = {
+  platform_admin: '系统管理员', park_admin: '单位管理员', data_steward: '数据员', observer: '查看人员'
+};
+export const SEVERITY_LABEL = { info: '提示', warning: '警告', critical: '严重' };
+export const SEVERITY_TAG = { info: 'is-info', warning: 'is-warning', critical: 'is-danger' };
+export const STATUS_LABEL = { open: '未处置', acknowledged: '处置中', closed: '已闭环' };
+
+
+/* ========== 文件: web/assets/js/components/iecsp-card.js ========== */
+
+// <iecsp-card title="..." hint="..."><slot></slot></iecsp-card>
+// 仅用 Light DOM 包装,沿用全局 components.css
+
+class IecspCard extends HTMLElement {
+  connectedCallback() {
+    if (this._mounted) return;
+    this._mounted = true;
+    const title = this.getAttribute('title') || '';
+    const hint  = this.getAttribute('hint')  || '';
+    const inner = this.innerHTML;
+    this.innerHTML = `
+      <section class="iecsp-card">
+        ${(title || hint) ? `<header class="iecsp-card__head">
+          <div class="iecsp-card__title">${title}</div>
+          ${hint ? `<div class="iecsp-card__hint">${hint}</div>` : ''}
+        </header>` : ''}
+        <div class="iecsp-card__body">${inner}</div>
+      </section>`;
+  }
+}
+customElements.define('iecsp-card', IecspCard);
+
+
+/* ========== 文件: web/assets/js/components/iecsp-chart.js ========== */
+
+// <iecsp-chart type="line|bar|donut|gauge"></iecsp-chart>
+// 通过 .data = {...} 设置数据,自动渲染
+
+import { LineChart } from '../charts/line.js';
+import { BarChart } from '../charts/bar.js';
+import { DonutChart } from '../charts/donut.js';
+import { GaugeChart } from '../charts/gauge.js';
+
+const KIND = { line: LineChart, bar: BarChart, donut: DonutChart, gauge: GaugeChart };
+
+class IecspChart extends HTMLElement {
+  static get observedAttributes() { return ['type', 'height']; }
+  connectedCallback() {
+    if (this._mounted) return;
+    this._mounted = true;
+    const type = this.getAttribute('type') || 'line';
+    const height = this.getAttribute('height') || '260px';
+    this.style.display = 'block';
+    this.style.position = 'relative';
+    this.style.width = '100%';
+    this.style.height = height;
+    const Klass = KIND[type] || LineChart;
+    this.chart = new Klass(this);
+    if (this._pendingData) { this.chart.setData(this._pendingData); this._pendingData = null; }
+  }
+  disconnectedCallback() {
+    if (this.chart) { try { this.chart.dispose(); } catch {} this.chart = null; }
+    this._mounted = false;
+  }
+  set data(v) {
+    if (this.chart) this.chart.setData(v);
+    else this._pendingData = v;
+  }
+}
+
+customElements.define('iecsp-chart', IecspChart);
+
+
+/* ========== 文件: web/assets/js/charts/base.js ========== */
+
+// 图表基类 — 处理高 DPI / resize / tooltip
+
+export class BaseChart {
+  constructor(host, options = {}) {
+    this.host = host;
+    this.options = options;
+    this.canvas = document.createElement('canvas');
+    this.canvas.style.cssText = 'display:block;width:100%;height:100%';
+    this.tip = document.createElement('div');
+    this.tip.style.cssText = 'position:absolute;pointer-events:none;background:rgba(15,26,44,.95);border:1px solid rgba(148,163,184,.3);border-radius:6px;padding:8px 10px;color:#e2e8f0;font-size:12px;line-height:1.6;box-shadow:0 4px 16px rgba(0,0,0,.4);display:none;z-index:10;white-space:nowrap';
+    host.style.position = host.style.position || 'relative';
+    host.appendChild(this.canvas);
+    host.appendChild(this.tip);
+    this.ctx = this.canvas.getContext('2d');
+    this._resize();
+    this._ro = new ResizeObserver(() => this._resize());
+    this._ro.observe(host);
+    this.canvas.addEventListener('mousemove', (e) => this._onMove(e));
+    this.canvas.addEventListener('mouseleave', () => { this.tip.style.display = 'none'; this._hover = null; this.render(); });
+  }
+  dispose() {
+    try { this._ro.disconnect(); } catch {}
+    this.canvas.remove();
+    this.tip.remove();
+  }
+  _resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const r = this.host.getBoundingClientRect();
+    this.w = Math.max(120, r.width | 0);
+    this.h = Math.max(80, r.height | 0);
+    this.canvas.width = this.w * dpr;
+    this.canvas.height = this.h * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.render();
+  }
+  setData(data) { this.data = data; this.render(); }
+  showTip(html, x, y) {
+    this.tip.innerHTML = html;
+    this.tip.style.display = 'block';
+    const r = this.host.getBoundingClientRect();
+    const tw = this.tip.offsetWidth, th = this.tip.offsetHeight;
+    let nx = x + 12, ny = y + 12;
+    if (nx + tw > r.width)  nx = x - tw - 12;
+    if (ny + th > r.height) ny = y - th - 12;
+    this.tip.style.left = nx + 'px';
+    this.tip.style.top  = ny + 'px';
+  }
+  _onMove(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    this._mouse = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    this.onHover && this.onHover(this._mouse);
+  }
+  render() { /* override */ }
+}
+
+export const FG = '#e2e8f0';
+export const FG_MUTED = '#94a3b8';
+export const FG_DIM = '#64748b';
+export const GRID = 'rgba(148,163,184,.15)';
+export const PALETTE = ['#22c55e', '#3b82f6', '#facc15', '#f97316', '#38bdf8', '#c084fc', '#f43f5e', '#06b6d4'];
+
+
+/* ========== 文件: web/assets/js/charts/line.js ========== */
+
+import { BaseChart, FG, FG_MUTED, GRID, PALETTE } from './base.js';
+
+/**
+ * LineChart — Canvas 自绘多系列折线
+ * data: { xLabels: string[], series: [{ name, values: number[], color? }], yUnit? }
+ */
+export class LineChart extends BaseChart {
+  constructor(host, opts) {
+    super(host, opts);
+    this.data = { xLabels: [], series: [], yUnit: '' };
+  }
+  onHover(m) {
+    if (!this.data || !this.data.xLabels.length) return;
+    const idx = this._xIndex(m.x);
+    if (idx < 0 || idx === this._hover) return;
+    this._hover = idx;
+    const html = [`<strong>${this.data.xLabels[idx] || ''}</strong>`];
+    for (const s of this.data.series) {
+      const v = s.values[idx];
+      html.push(`<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.color};margin-right:6px"></span>${s.name}:<strong style="margin-left:6px">${v == null ? '—' : formatNum(v) + (this.data.yUnit || '')}</strong></div>`);
+    }
+    this.showTip(html.join(''), m.x, m.y);
+    this.render();
+  }
+  _xIndex(x) {
+    const a = this._area; if (!a) return -1;
+    if (x < a.x || x > a.x + a.w) return -1;
+    const n = this.data.xLabels.length;
+    if (n < 2) return 0;
+    const step = a.w / (n - 1);
+    return Math.max(0, Math.min(n - 1, Math.round((x - a.x) / step)));
+  }
+  render() {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    ctx.clearRect(0, 0, this.w, this.h);
+    const padL = 44, padR = 16, padT = 12, padB = 30;
+    const area = { x: padL, y: padT, w: this.w - padL - padR, h: this.h - padT - padB };
+    this._area = area;
+    const { xLabels = [], series = [], yUnit = '' } = this.data || {};
+
+    // 计算 Y 范围
+    let min = Infinity, max = -Infinity;
+    for (const s of series) for (const v of s.values || []) {
+      if (typeof v !== 'number' || !isFinite(v)) continue;
+      if (v < min) min = v; if (v > max) max = v;
+    }
+    if (!isFinite(min)) { min = 0; max = 1; }
+    if (min === max) { max = min + 1; }
+    const span = max - min;
+    min = Math.max(0, min - span * 0.05);
+    max = max + span * 0.1;
+
+    // 网格 + Y 轴
+    ctx.strokeStyle = GRID;
+    ctx.lineWidth = 1;
+    ctx.fillStyle = FG_MUTED;
+    ctx.font = '11px ui-sans-serif, system-ui';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const rows = 5;
+    for (let i = 0; i <= rows; i++) {
+      const y = area.y + (area.h * i) / rows;
+      ctx.beginPath(); ctx.moveTo(area.x, y); ctx.lineTo(area.x + area.w, y); ctx.stroke();
+      const v = max - ((max - min) * i) / rows;
+      ctx.fillText(formatAxis(v), area.x - 6, y);
+    }
+
+    // X 轴标签
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const n = xLabels.length;
+    const stride = Math.max(1, Math.ceil(n / Math.floor(area.w / 70)));
+    for (let i = 0; i < n; i += stride) {
+      const x = area.x + (n > 1 ? (area.w * i) / (n - 1) : area.w / 2);
+      ctx.fillText(xLabels[i], x, area.y + area.h + 6);
+    }
+
+    // hover guideline
+    if (this._hover != null && n > 1) {
+      const hx = area.x + (area.w * this._hover) / (n - 1);
+      ctx.strokeStyle = 'rgba(148,163,184,.35)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(hx, area.y); ctx.lineTo(hx, area.y + area.h); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // 系列
+    series.forEach((s, idx) => {
+      const color = s.color || PALETTE[idx % PALETTE.length];
+      const vals = s.values || [];
+      // 区域填充
+      ctx.beginPath();
+      vals.forEach((v, i) => {
+        if (typeof v !== 'number' || !isFinite(v)) return;
+        const x = area.x + (n > 1 ? (area.w * i) / (n - 1) : area.w / 2);
+        const y = area.y + area.h - ((v - min) / (max - min)) * area.h;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(area.x + area.w, area.y + area.h);
+      ctx.lineTo(area.x, area.y + area.h);
+      ctx.closePath();
+      const grad = ctx.createLinearGradient(0, area.y, 0, area.y + area.h);
+      grad.addColorStop(0, hexAlpha(color, 0.35));
+      grad.addColorStop(1, hexAlpha(color, 0));
+      ctx.fillStyle = grad;
+      ctx.fill();
+      // 折线
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      vals.forEach((v, i) => {
+        if (typeof v !== 'number' || !isFinite(v)) return;
+        const x = area.x + (n > 1 ? (area.w * i) / (n - 1) : area.w / 2);
+        const y = area.y + area.h - ((v - min) / (max - min)) * area.h;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      // hover 点
+      if (this._hover != null) {
+        const v = vals[this._hover];
+        if (typeof v === 'number' && isFinite(v)) {
+          const x = area.x + (n > 1 ? (area.w * this._hover) / (n - 1) : area.w / 2);
+          const y = area.y + area.h - ((v - min) / (max - min)) * area.h;
+          ctx.fillStyle = color;
+          ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#0b1220';
+          ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    });
+
+    // 图例
+    let lx = area.x;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '12px ui-sans-serif, system-ui';
+    series.forEach((s, idx) => {
+      const color = s.color || PALETTE[idx % PALETTE.length];
+      ctx.fillStyle = color;
+      ctx.fillRect(lx, padT - 8, 10, 3);
+      ctx.fillStyle = FG;
+      ctx.fillText(s.name, lx + 14, padT - 6);
+      lx += ctx.measureText(s.name).width + 36;
+    });
+  }
+}
+
+function formatAxis(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+  return v.toFixed(a < 10 ? 2 : 0);
+}
+function formatNum(v) {
+  return Math.abs(v) >= 1000 ? v.toFixed(0).replace(/\B(?=(\d{3})+$)/g, ',') : v.toFixed(2);
+}
+function hexAlpha(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+
+/* ========== 文件: web/assets/js/charts/bar.js ========== */
+
+import { BaseChart, FG, FG_MUTED, GRID, PALETTE } from './base.js';
+
+/**
+ * BarChart — Canvas 自绘柱状图(单系列或分组)
+ * data: { labels: string[], series: [{ name, values, color? }], yUnit? }
+ */
+export class BarChart extends BaseChart {
+  constructor(host, opts) {
+    super(host, opts);
+    this.data = { labels: [], series: [] };
+  }
+  onHover(m) {
+    if (!this._slots) return;
+    const idx = this._slots.findIndex(s => m.x >= s.x && m.x <= s.x + s.w);
+    if (idx === this._hover) return;
+    this._hover = idx;
+    if (idx < 0) { this.tip.style.display = 'none'; this.render(); return; }
+    const label = this.data.labels[idx];
+    const lines = [`<strong>${label}</strong>`];
+    this.data.series.forEach((s, i) => {
+      const color = s.color || PALETTE[i % PALETTE.length];
+      const v = s.values[idx];
+      lines.push(`<div><span style="display:inline-block;width:8px;height:8px;background:${color};margin-right:6px;border-radius:2px"></span>${s.name}:<strong style="margin-left:6px">${v == null ? '—' : formatNum(v) + (this.data.yUnit || '')}</strong></div>`);
+    });
+    this.showTip(lines.join(''), m.x, m.y);
+    this.render();
+  }
+  render() {
+    const ctx = this.ctx; if (!ctx) return;
+    ctx.clearRect(0, 0, this.w, this.h);
+    const padL = 44, padR = 16, padT = 14, padB = 30;
+    const area = { x: padL, y: padT, w: this.w - padL - padR, h: this.h - padT - padB };
+    const { labels = [], series = [] } = this.data || {};
+    const n = labels.length, k = series.length;
+    if (!n || !k) return;
+
+    let max = 0;
+    for (const s of series) for (const v of s.values || []) {
+      if (typeof v === 'number' && v > max) max = v;
+    }
+    if (max <= 0) max = 1;
+    max = max * 1.1;
+
+    ctx.strokeStyle = GRID; ctx.lineWidth = 1;
+    ctx.fillStyle = FG_MUTED; ctx.font = '11px ui-sans-serif, system-ui';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    const rows = 4;
+    for (let i = 0; i <= rows; i++) {
+      const y = area.y + (area.h * i) / rows;
+      ctx.beginPath(); ctx.moveTo(area.x, y); ctx.lineTo(area.x + area.w, y); ctx.stroke();
+      ctx.fillText(formatAxis(max - (max * i) / rows), area.x - 6, y);
+    }
+
+    const slotW = area.w / n;
+    const groupGap = slotW * 0.18;
+    const barW = (slotW - groupGap) / k;
+    const slots = [];
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let i = 0; i < n; i++) {
+      const sx = area.x + slotW * i + groupGap / 2;
+      slots.push({ x: sx, w: slotW - groupGap });
+      for (let j = 0; j < k; j++) {
+        const v = series[j].values[i];
+        if (typeof v !== 'number') continue;
+        const color = series[j].color || PALETTE[j % PALETTE.length];
+        const h = (v / max) * area.h;
+        const x = sx + barW * j;
+        const y = area.y + area.h - h;
+        const grad = ctx.createLinearGradient(0, y, 0, y + h);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, hexAlpha(color, 0.45));
+        ctx.fillStyle = grad;
+        roundRect(ctx, x + 1, y, barW - 2, h, 3);
+        ctx.fill();
+      }
+      ctx.fillStyle = FG_MUTED;
+      ctx.fillText(labels[i], sx + (slotW - groupGap) / 2, area.y + area.h + 6);
+    }
+    this._slots = slots;
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  if (h <= 0) return;
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+function formatAxis(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+  return v.toFixed(a < 10 ? 1 : 0);
+}
+function formatNum(v) { return Math.abs(v) >= 1000 ? v.toFixed(0).replace(/\B(?=(\d{3})+$)/g, ',') : v.toFixed(2); }
+function hexAlpha(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+
+/* ========== 文件: web/assets/js/charts/donut.js ========== */
+
+import { BaseChart, FG, FG_MUTED, PALETTE } from './base.js';
+
+/** DonutChart — 环形图,中心可显示总值 */
+export class DonutChart extends BaseChart {
+  constructor(host, opts) {
+    super(host, opts);
+    this.data = { items: [], total: null, unit: '', centerLabel: '' };
+  }
+  onHover(m) {
+    if (!this._segs) return;
+    const c = this._center;
+    const dx = m.x - c.x, dy = m.y - c.y;
+    const d = Math.hypot(dx, dy);
+    if (d < this._inner || d > this._outer) { this._hover = -1; this.tip.style.display = 'none'; this.render(); return; }
+    let ang = Math.atan2(dy, dx);
+    if (ang < -Math.PI / 2) ang += Math.PI * 2;
+    const idx = this._segs.findIndex(s => ang >= s.start && ang < s.end);
+    if (idx === this._hover) return;
+    this._hover = idx;
+    if (idx >= 0) {
+      const it = this.data.items[idx];
+      this.showTip(`<strong>${it.label}</strong><br/>${formatNum(it.value)} ${this.data.unit || ''} · ${(it.value / this._sum * 100).toFixed(1)}%`, m.x, m.y);
+    }
+    this.render();
+  }
+  render() {
+    const ctx = this.ctx; if (!ctx) return;
+    ctx.clearRect(0, 0, this.w, this.h);
+    const { items = [], total, unit = '', centerLabel = '' } = this.data || {};
+    const padR = 100;
+    const cx = (this.w - padR) / 2;
+    const cy = this.h / 2;
+    const outer = Math.min(this.w - padR, this.h) / 2 - 8;
+    const inner = outer * 0.62;
+    this._center = { x: cx, y: cy };
+    this._outer = outer; this._inner = inner;
+
+    const sum = items.reduce((a, b) => a + (b.value || 0), 0) || 1;
+    this._sum = sum;
+    let cur = -Math.PI / 2;
+    const segs = [];
+    items.forEach((it, i) => {
+      const color = it.color || PALETTE[i % PALETTE.length];
+      const start = cur;
+      const end = cur + (it.value / sum) * Math.PI * 2;
+      segs.push({ start, end });
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, outer, start, end, false);
+      ctx.closePath();
+      ctx.fillStyle = i === this._hover ? brighten(color) : color;
+      ctx.fill();
+      cur = end;
+    });
+    this._segs = segs;
+    // 内圈
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 中心数值
+    ctx.fillStyle = FG_MUTED;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '12px ui-sans-serif, system-ui';
+    ctx.fillText(centerLabel, cx, cy - 16);
+    ctx.fillStyle = FG;
+    ctx.font = '600 22px ui-sans-serif, system-ui';
+    const totVal = total != null ? total : sum;
+    ctx.fillText(formatNum(totVal), cx, cy + 6);
+    if (unit) {
+      ctx.fillStyle = FG_MUTED;
+      ctx.font = '11px ui-sans-serif, system-ui';
+      ctx.fillText(unit, cx, cy + 24);
+    }
+
+    // 右侧图例
+    let ly = 16;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '12px ui-sans-serif, system-ui';
+    items.forEach((it, i) => {
+      const color = it.color || PALETTE[i % PALETTE.length];
+      ctx.fillStyle = color; ctx.fillRect(this.w - padR + 8, ly - 5, 10, 10);
+      ctx.fillStyle = FG;
+      ctx.fillText(it.label, this.w - padR + 24, ly);
+      ctx.fillStyle = FG_MUTED;
+      ctx.fillText(((it.value / sum) * 100).toFixed(1) + '%', this.w - padR + 24, ly + 14);
+      ly += 36;
+    });
+  }
+}
+
+function brighten(hex) {
+  const h = hex.replace('#', '');
+  let r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  r = Math.min(255, r + 28); g = Math.min(255, g + 28); b = Math.min(255, b + 28);
+  return `rgb(${r},${g},${b})`;
+}
+function formatNum(v) { return Math.abs(v) >= 1000 ? v.toFixed(0).replace(/\B(?=(\d{3})+$)/g, ',') : v.toFixed(2); }
+
+
+/* ========== 文件: web/assets/js/charts/gauge.js ========== */
+
+import { BaseChart, FG, FG_MUTED } from './base.js';
+
+/** GaugeChart — 半圆仪表盘 */
+export class GaugeChart extends BaseChart {
+  constructor(host, opts) {
+    super(host, opts);
+    this.data = { value: 0, min: 0, max: 100, label: '', unit: '%', segments: null };
+  }
+  render() {
+    const ctx = this.ctx; if (!ctx) return;
+    ctx.clearRect(0, 0, this.w, this.h);
+    const { value = 0, min = 0, max = 100, label = '', unit = '', segments } = this.data || {};
+    const cx = this.w / 2, cy = this.h - 24;
+    const r = Math.min(this.w / 2 - 16, this.h - 32);
+    const thick = Math.max(10, r * 0.18);
+    const startA = Math.PI, endA = 2 * Math.PI;
+    const ratio = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
+
+    // 背景轨道(分段着色)
+    const ranges = segments || [
+      { stop: 0.6, color: '#22c55e' },
+      { stop: 0.85, color: '#f59e0b' },
+      { stop: 1.0,  color: '#ef4444' }
+    ];
+    let prev = 0;
+    for (const sg of ranges) {
+      ctx.beginPath();
+      ctx.lineWidth = thick;
+      ctx.strokeStyle = sg.color;
+      ctx.lineCap = 'butt';
+      ctx.arc(cx, cy, r - thick / 2, startA + prev * Math.PI, startA + sg.stop * Math.PI);
+      ctx.stroke();
+      prev = sg.stop;
+    }
+
+    // 灰色覆盖未到达部分
+    ctx.beginPath();
+    ctx.lineWidth = thick;
+    ctx.strokeStyle = 'rgba(15,26,44,0.85)';
+    ctx.arc(cx, cy, r - thick / 2, startA + ratio * Math.PI, endA);
+    ctx.stroke();
+
+    // 指针
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(startA + ratio * Math.PI);
+    ctx.fillStyle = FG;
+    ctx.beginPath();
+    ctx.moveTo(-3, 0);
+    ctx.lineTo(0, -(r - thick - 4));
+    ctx.lineTo(3, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // 文本
+    ctx.fillStyle = FG;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '700 24px ui-sans-serif, system-ui';
+    ctx.fillText(formatNum(value) + (unit || ''), cx, cy - r * 0.2);
+    ctx.fillStyle = FG_MUTED;
+    ctx.font = '12px ui-sans-serif, system-ui';
+    ctx.fillText(label, cx, cy - r * 0.45);
+    ctx.font = '11px ui-sans-serif, system-ui';
+    ctx.fillText(formatNum(min), cx - r + thick / 2, cy + 14);
+    ctx.fillText(formatNum(max), cx + r - thick / 2, cy + 14);
+  }
+}
+
+function formatNum(v) { return Math.abs(v) >= 1000 ? v.toFixed(0).replace(/\B(?=(\d{3})+$)/g, ',') : (v % 1 === 0 ? String(v) : v.toFixed(1)); }
+
+
+/* ========== 文件: web/assets/js/pages/cockpit.js ========== */
+
+// 综合总览
+import { api } from '../core/api.js';
+import { fmtNumber, ENERGY_LABEL, ENERGY_COLOR } from '../core/utils.js';
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title">
+      <h2>综合总览 <small>关键指标和趋势</small></h2>
+      <button class="iecsp-btn sm" id="ck-refresh"><span class="iecsp-loading" style="display:none" id="ck-spin"></span> 刷新</button>
+    </div>
+
+    <section class="grid grid-4" id="ck-kpis"></section>
+
+    <section class="grid grid-2-1 mt-16">
+      <iecsp-card title="本年逐月碳排放" hint="按月聚合 (tCO₂e)">
+        <iecsp-chart id="ck-trend" type="line" height="280px"></iecsp-chart>
+      </iecsp-card>
+      <iecsp-card title="本年能源结构" hint="按能源类型 占比">
+        <iecsp-chart id="ck-mix" type="donut" height="280px"></iecsp-chart>
+      </iecsp-card>
+    </section>
+
+    <section class="grid grid-2-1 mt-16">
+      <iecsp-card title="本月碳排放构成" hint="单位:tCO₂e">
+        <iecsp-chart id="ck-month-bar" type="bar" height="260px"></iecsp-chart>
+      </iecsp-card>
+      <iecsp-card title="碳配额使用率" hint="当前履约年度">
+        <iecsp-chart id="ck-gauge" type="gauge" height="260px"></iecsp-chart>
+      </iecsp-card>
+    </section>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+  const spin = $('ck-spin');
+  const setSpin = (on) => { spin.style.display = on ? 'inline-block' : 'none'; };
+
+  async function load() {
+    setSpin(true);
+    try {
+      const [s, t] = await Promise.all([
+        api('/cockpit/summary'),
+        api('/cockpit/trend?year=' + new Date().getUTCFullYear())
+      ]);
+      paintKpis(s.data);
+      paintTrend(t.data);
+      paintMix(s.data);
+      paintMonthBar(s.data);
+      paintGauge(s.data);
+    } catch (e) {
+      console.error(e);
+    } finally { setSpin(false); }
+  }
+
+  function paintKpis(d) {
+    const k = d.kpis;
+    const items = [
+      { label: '本年累计碳排放', value: fmtNumber(k.yearTotalCO2eT, 2), unit: 'tCO₂e', hint: `${d.year} 年累计` },
+      { label: '本月碳排放',     value: fmtNumber(k.monthTotalCO2eT, 2), unit: 'tCO₂e', hint: '当月聚合' },
+      { label: '在线计量点',     value: `${k.metersActive}/${k.metersTotal}`, unit: '个', hint: '在线/总数' },
+      { label: '未处置风险',     value: k.openRisks, unit: '起', hint: `严重 ${k.criticalRisks} 起`, tone: k.openRisks > 0 ? 'warning' : 'primary' }
+    ];
+    $('ck-kpis').innerHTML = items.map(it => `
+      <iecsp-card>
+        <div class="iecsp-kpi">
+          <div class="iecsp-kpi__label">${it.label}</div>
+          <div class="iecsp-kpi__value" style="${it.tone === 'warning' ? 'color:var(--warning)' : ''}">${it.value}<span class="unit">${it.unit}</span></div>
+          <div class="iecsp-kpi__hint">${it.hint}</div>
+        </div>
+      </iecsp-card>`).join('');
+  }
+
+  function paintTrend(rows) {
+    const xLabels = rows.map(r => r.month + '月');
+    const values = rows.map(r => +r.co2eT.toFixed(3));
+    $('ck-trend').data = {
+      xLabels,
+      series: [{ name: 'CO₂e', values, color: '#22c55e' }],
+      yUnit: ' t'
+    };
+  }
+
+  function paintMix(d) {
+    const items = (d.yearBreakdown || []).filter(b => b.energy > 0).map(b => ({
+      label: ENERGY_LABEL[b.energyType] || b.energyType,
+      value: +b.co2eT.toFixed(3),
+      color: ENERGY_COLOR[b.energyType]
+    }));
+    $('ck-mix').data = { items, unit: 'tCO₂e', centerLabel: '本年 CO₂e' };
+  }
+
+  function paintMonthBar(d) {
+    const labels = d.monthBreakdown.map(b => ENERGY_LABEL[b.energyType] || b.energyType);
+    const values = d.monthBreakdown.map(b => +b.co2eT.toFixed(3));
+    const colors = d.monthBreakdown.map(b => ENERGY_COLOR[b.energyType]);
+    $('ck-month-bar').data = {
+      labels,
+      series: [{ name: 'CO₂e', values, color: '#3b82f6' }],
+      yUnit: ' t',
+      barColors: colors
+    };
+  }
+
+  function paintGauge(d) {
+    const k = d.kpis;
+    const pct = Math.round((k.quotaRatio || 0) * 100);
+    $('ck-gauge').data = {
+      value: pct, min: 0, max: 100, label: `已用 ${fmtNumber(k.quotaUsed, 1)} / ${fmtNumber(k.quotaAllocated, 0)} tCO₂e`, unit: '%'
+    };
+  }
+
+  $('ck-refresh').addEventListener('click', load);
+  let timer = setInterval(load, 60_000);
+  load();
+
+  return { dispose() { clearInterval(timer); } };
+}
+
+
+/* ========== 文件: web/assets/js/pages/energy.js ========== */
+
+// 能源数据接入 — 选计量点查看历史曲线 + 手工补录
+import { api, qs } from '../core/api.js';
+import { ENERGY_LABEL, ENERGY_UNIT, fmtTime, escapeHtml } from '../core/utils.js';
+import { toast } from '../core/toast.js';
+import { modal } from '../core/modal.js';
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>实时数据 <small>查看历史曲线，必要时可以手工补录</small></h2></div>
+
+    <iecsp-card>
+      <div class="iecsp-toolbar">
+        <select class="iecsp-select" id="en-meter" style="max-width:280px"></select>
+        <select class="iecsp-select" id="en-range" style="max-width:140px">
+          <option value="-6h">近 6 小时</option>
+          <option value="-24h" selected>近 24 小时</option>
+          <option value="-7d">近 7 天</option>
+          <option value="-30d">近 30 天</option>
+        </select>
+        <select class="iecsp-select" id="en-every" style="max-width:140px">
+          <option value="5m">5 分钟</option>
+          <option value="15m" selected>15 分钟</option>
+          <option value="1h">1 小时</option>
+          <option value="1d">1 天</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="iecsp-btn" id="en-refresh">刷新</button>
+        <button class="iecsp-btn is-primary" id="en-ingest">手工补录</button>
+      </div>
+      <iecsp-chart id="en-chart" type="line" height="320px"></iecsp-chart>
+      <div class="txt-muted mt-12" id="en-stat" style="font-size:12px"></div>
+    </iecsp-card>
+
+    <iecsp-card class="mt-16" title="实时数据流" hint="最近 20 条">
+      <table class="iecsp-table">
+        <thead><tr><th>时间</th><th>计量点</th><th>读数</th></tr></thead>
+        <tbody id="en-live"><tr><td colspan="3" class="empty">尚无消息</td></tr></tbody>
+      </table>
+    </iecsp-card>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+  const meterSel = $('en-meter'), rangeSel = $('en-range'), everySel = $('en-every');
+  let meters = [];
+
+  async function loadMeters() {
+    const res = await api('/meters');
+    meters = res.data;
+    meterSel.innerHTML = meters.map(m =>
+      `<option value="${m.code}">${escapeHtml(m.name)} · ${ENERGY_LABEL[m.energyType] || ''} (${m.code})</option>`
+    ).join('');
+  }
+
+  async function loadCurve() {
+    if (!meterSel.value) return;
+    const meter = meters.find(m => m.code === meterSel.value);
+    const params = qs({ meterCode: meterSel.value, start: rangeSel.value, stop: 'now()', every: everySel.value });
+    const res = await api('/energy/readings' + params);
+    const xLabels = res.data.map(r => fmtTime(r.time).slice(5));
+    const values = res.data.map(r => +Number(r.value).toFixed(3));
+    $('en-chart').data = {
+      xLabels,
+      series: [{ name: meter ? meter.name : meterSel.value, values, color: '#3b82f6' }],
+      yUnit: ' ' + (meter ? meter.unit : '')
+    };
+    const sum = values.reduce((a, b) => a + b, 0);
+    $('en-stat').textContent = `${res.data.length} 条数据点 · 区间累计 ${sum.toFixed(2)} ${meter ? meter.unit : ''}`;
+  }
+
+  await loadMeters();
+  await loadCurve();
+
+  $('en-refresh').addEventListener('click', loadCurve);
+  meterSel.addEventListener('change', loadCurve);
+  rangeSel.addEventListener('change', loadCurve);
+  everySel.addEventListener('change', loadCurve);
+
+  $('en-ingest').addEventListener('click', async () => {
+    const meter = meters.find(m => m.code === meterSel.value);
+    if (!meter) return;
+    const form = document.createElement('div');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>计量点</label><input class="iecsp-input" readonly value="${escapeHtml(meter.code + ' / ' + meter.name)}"/></div>
+        <div class="iecsp-form-row"><label>能源类型</label><input class="iecsp-input" readonly value="${ENERGY_LABEL[meter.energyType] || meter.energyType}"/></div>
+        <div class="iecsp-form-row"><label>数值 (${meter.unit})</label><input class="iecsp-input" id="in-val" type="number" step="0.01" required/></div>
+        <div class="iecsp-form-row"><label>时间(留空=当前)</label><input class="iecsp-input" id="in-ts" type="datetime-local"/></div>
+      </div>`;
+    const ok = await modal({
+      title: '手工补录读数',
+      body: form,
+      confirmText: '提交',
+      onConfirm: async () => {
+        const v = parseFloat(form.querySelector('#in-val').value);
+        if (!Number.isFinite(v)) { toast('请输入合法数值', 'warning'); return false; }
+        const tsv = form.querySelector('#in-ts').value;
+        const ts = tsv ? new Date(tsv).getTime() : undefined;
+        try {
+          await api('/energy/ingest', { method: 'POST', body: { meterCode: meter.code, value: v, ts } });
+          toast('补录成功', 'success');
+          loadCurve();
+        } catch (e) { toast(e.message || '补录失败', 'danger'); return false; }
+      }
+    });
+  });
+
+  const live = $('en-live');
+  const rows = [];
+  const handler = (ev) => {
+    const p = ev.detail;
+    rows.unshift(p);
+    if (rows.length > 20) rows.pop();
+    if (rows.length === 0) {
+      live.innerHTML = '<tr><td colspan="3" class="empty">尚无消息</td></tr>';
+    } else {
+      live.innerHTML = rows.map(r => `<tr>
+        <td>${fmtTime(r.ts, true)}</td>
+        <td>${escapeHtml(r.meter)}</td>
+        <td><strong>${Number(r.value).toFixed(2)}</strong></td>
+      </tr>`).join('');
+    }
+  };
+  window.addEventListener('iecsp:ws:meter', handler);
+
+  return { dispose() { window.removeEventListener('iecsp:ws:meter', handler); } };
+}
+
+
+/* ========== 文件: web/assets/js/pages/meters.js ========== */
+
+// 计量点台账
+import { api } from '../core/api.js';
+import { ENERGY_LABEL, escapeHtml, fmtTime } from '../core/utils.js';
+import { modal } from '../core/modal.js';
+import { toast } from '../core/toast.js';
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>计量点管理 <small>登记表计、维护采集主题</small></h2></div>
+    <iecsp-card>
+      <div class="iecsp-toolbar">
+        <select class="iecsp-select" id="m-type" style="max-width:180px">
+          <option value="">全部能源类型</option>
+        </select>
+        <select class="iecsp-select" id="m-status" style="max-width:160px">
+          <option value="">全部状态</option>
+          <option value="active">运行中</option>
+          <option value="paused">已暂停</option>
+          <option value="scrapped">已报废</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="iecsp-btn is-primary" id="m-add">新增计量点</button>
+      </div>
+      <table class="iecsp-table">
+        <thead><tr>
+          <th>编号</th><th>名称</th><th>能源</th><th>所属组织</th><th>单位</th>
+          <th>位置</th><th>MQTT 主题</th><th>状态</th><th>建档时间</th><th class="action-col">操作</th>
+        </tr></thead>
+        <tbody id="m-rows"></tbody>
+      </table>
+    </iecsp-card>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+  const typeSel = $('m-type'), statusSel = $('m-status');
+  ['electricity','gas','water','steam','heat','coal'].forEach(t => {
+    const o = document.createElement('option'); o.value = t; o.textContent = ENERGY_LABEL[t]; typeSel.appendChild(o);
+  });
+
+  let orgs = [];
+  async function loadOrgs() {
+    const r = await api('/account/orgs');
+    orgs = r.data;
+  }
+  async function load() {
+    const qs = new URLSearchParams();
+    if (typeSel.value) qs.set('energyType', typeSel.value);
+    if (statusSel.value) qs.set('status', statusSel.value);
+    const r = await api('/meters' + (qs.toString() ? '?' + qs.toString() : ''));
+    const rows = r.data;
+    const tb = $('m-rows');
+    if (!rows.length) { tb.innerHTML = '<tr><td colspan="10" class="empty">暂无计量点</td></tr>'; return; }
+    tb.innerHTML = rows.map(m => `<tr>
+      <td><code style="font-size:12px">${escapeHtml(m.code)}</code></td>
+      <td>${escapeHtml(m.name)}</td>
+      <td><span class="iecsp-tag is-accent">${ENERGY_LABEL[m.energyType] || m.energyType}</span></td>
+      <td>${escapeHtml(m.org?.name || '—')}</td>
+      <td>${escapeHtml(m.unit)}</td>
+      <td>${escapeHtml(m.location || '—')}</td>
+      <td style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--fg-muted)">${escapeHtml(m.mqttTopic || '—')}</td>
+      <td>${tagStatus(m.status)}</td>
+      <td class="txt-muted">${fmtTime(m.createdAt).slice(0,10)}</td>
+      <td class="action-col">
+        <button class="iecsp-btn sm" data-act="edit" data-id="${m.id}">编辑</button>
+        <button class="iecsp-btn sm" data-act="toggle" data-id="${m.id}">${m.status === 'active' ? '暂停' : '启用'}</button>
+      </td>
+    </tr>`).join('');
+  }
+
+  function tagStatus(s) {
+    if (s === 'active')   return '<span class="iecsp-tag is-primary">运行中</span>';
+    if (s === 'paused')   return '<span class="iecsp-tag is-warning">已暂停</span>';
+    if (s === 'scrapped') return '<span class="iecsp-tag is-default">已报废</span>';
+    return `<span class="iecsp-tag is-default">${escapeHtml(s)}</span>`;
+  }
+
+  await loadOrgs();
+  await load();
+  typeSel.addEventListener('change', load);
+  statusSel.addEventListener('change', load);
+
+  $('m-add').addEventListener('click', () => openEditor(null));
+
+  $('m-rows').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-act]'); if (!t) return;
+    const id = +t.getAttribute('data-id');
+    const act = t.getAttribute('data-act');
+    if (act === 'edit') {
+      const r = await api('/meters/' + id);
+      openEditor(r.data);
+    } else if (act === 'toggle') {
+      const r = await api('/meters/' + id);
+      const next = r.data.status === 'active' ? 'paused' : 'active';
+      try {
+        await api('/meters/' + id, { method: 'PUT', body: { status: next } });
+        toast('已更新', 'success');
+        load();
+      } catch (ex) { toast(ex.message, 'danger'); }
+    }
+  });
+
+  function openEditor(m) {
+    const isNew = !m;
+    const form = document.createElement('div');
+    const energyOpts = ['electricity','gas','water','steam','heat','coal']
+      .map(t => `<option value="${t}" ${m && m.energyType === t ? 'selected' : ''}>${ENERGY_LABEL[t]}</option>`).join('');
+    const orgOpts = orgs.map(o => `<option value="${o.id}" ${m && m.orgId === o.id ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>编号</label><input class="iecsp-input" id="f-code" ${isNew ? '' : 'readonly'} value="${escapeHtml(m?.code || '')}" placeholder="如 M-E-001"/></div>
+        <div class="iecsp-form-row"><label>名称</label><input class="iecsp-input" id="f-name" value="${escapeHtml(m?.name || '')}"/></div>
+        <div class="iecsp-form-row"><label>能源类型</label><select class="iecsp-select" id="f-et" ${isNew ? '' : 'disabled'}>${energyOpts}</select></div>
+        <div class="iecsp-form-row"><label>所属组织</label><select class="iecsp-select" id="f-org">${orgOpts}</select></div>
+        <div class="iecsp-form-row"><label>单位</label><input class="iecsp-input" id="f-unit" value="${escapeHtml(m?.unit || '')}"/></div>
+        <div class="iecsp-form-row"><label>倍率</label><input class="iecsp-input" id="f-scale" type="number" step="0.001" value="${m?.scaleFactor ?? 1}"/></div>
+        <div class="iecsp-form-row"><label>位置</label><input class="iecsp-input" id="f-loc" value="${escapeHtml(m?.location || '')}"/></div>
+        <div class="iecsp-form-row"><label>MQTT 主题</label><input class="iecsp-input" id="f-mqtt" value="${escapeHtml(m?.mqttTopic || '')}" placeholder="iecsp/meter/M-E-001/reading"/></div>
+      </div>`;
+    modal({
+      title: isNew ? '新增计量点' : '编辑计量点',
+      body: form,
+      confirmText: isNew ? '创建' : '保存',
+      onConfirm: async () => {
+        const body = {
+          code: form.querySelector('#f-code').value.trim(),
+          name: form.querySelector('#f-name').value.trim(),
+          energyType: form.querySelector('#f-et').value,
+          orgId: +form.querySelector('#f-org').value,
+          unit: form.querySelector('#f-unit').value.trim(),
+          scaleFactor: +form.querySelector('#f-scale').value,
+          location: form.querySelector('#f-loc').value.trim(),
+          mqttTopic: form.querySelector('#f-mqtt').value.trim() || undefined
+        };
+        try {
+          if (isNew) await api('/meters', { method: 'POST', body });
+          else {
+            const patch = { name: body.name, location: body.location, scaleFactor: body.scaleFactor, mqttTopic: body.mqttTopic };
+            await api('/meters/' + m.id, { method: 'PUT', body: patch });
+          }
+          toast('已保存', 'success');
+          load();
+        } catch (ex) { toast(ex.message, 'danger'); return false; }
+      }
+    });
+  }
+
+  return {};
+}
+
+
+/* ========== 文件: web/assets/js/pages/carbon.js ========== */
+
+// 碳足迹核算
+import { api } from '../core/api.js';
+import { ENERGY_LABEL, ENERGY_COLOR, fmtNumber, fmtTime, escapeHtml } from '../core/utils.js';
+import { modal } from '../core/modal.js';
+import { toast } from '../core/toast.js';
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>碳排放核算 <small>排放因子和区间核算结果</small></h2></div>
+
+    <section class="grid grid-2-1">
+      <iecsp-card title="按时段核算" hint="按能源类型分解 CO₂e">
+        <div class="iecsp-toolbar">
+          <select class="iecsp-select" id="c-range" style="max-width:180px">
+            <option value="-30d" selected>近 30 天</option>
+            <option value="-7d">近 7 天</option>
+            <option value="-90d">近 90 天</option>
+            <option value="-365d">近 1 年</option>
+          </select>
+          <div class="spacer"></div>
+          <span class="txt-muted" id="c-total">—</span>
+        </div>
+        <iecsp-chart id="c-bar" type="bar" height="240px"></iecsp-chart>
+        <table class="iecsp-table mt-12">
+          <thead><tr><th>能源</th><th>能耗</th><th>因子</th><th>CO₂e (kg)</th><th>CO₂e (t)</th></tr></thead>
+          <tbody id="c-tbody"></tbody>
+        </table>
+      </iecsp-card>
+
+      <iecsp-card title="排放因子" hint="按生效日期管理多个版本">
+        <div class="iecsp-toolbar">
+          <div class="spacer"></div>
+          <button class="iecsp-btn is-primary sm" id="c-add">新增因子</button>
+        </div>
+        <table class="iecsp-table">
+          <thead><tr><th>能源</th><th>因子 (kgCO₂e/单位)</th><th>生效</th><th>来源</th></tr></thead>
+          <tbody id="c-factors"></tbody>
+        </table>
+      </iecsp-card>
+    </section>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+
+  async function loadFootprint() {
+    const r = await api('/carbon/footprint?start=' + $('c-range').value + '&stop=now()');
+    const d = r.data;
+    $('c-total').textContent = `区间合计 ${fmtNumber(d.totalT, 3)} tCO₂e`;
+    const labels = d.breakdown.map(b => ENERGY_LABEL[b.energyType] || b.energyType);
+    const values = d.breakdown.map(b => +b.co2eT.toFixed(3));
+    $('c-bar').data = {
+      labels,
+      series: [{ name: 'CO₂e', values, color: '#22c55e' }],
+      yUnit: ' t'
+    };
+    $('c-tbody').innerHTML = d.breakdown.map(b => `<tr>
+      <td><span class="iecsp-tag" style="background:${ENERGY_COLOR[b.energyType]}33;color:${ENERGY_COLOR[b.energyType]}">${ENERGY_LABEL[b.energyType] || b.energyType}</span></td>
+      <td>${fmtNumber(b.energy, 2)} ${escapeHtml(b.unit)}</td>
+      <td>${b.factor}</td>
+      <td>${fmtNumber(b.co2eKg, 0)}</td>
+      <td><strong>${fmtNumber(b.co2eT, 3)}</strong></td>
+    </tr>`).join('');
+  }
+
+  async function loadFactors() {
+    const r = await api('/carbon/factors');
+    $('c-factors').innerHTML = r.data.map(f => `<tr>
+      <td>${ENERGY_LABEL[f.energyType] || f.energyType}</td>
+      <td><strong>${f.factor}</strong> <span class="txt-muted">/ ${escapeHtml(f.unit)}</span></td>
+      <td class="txt-muted">${fmtTime(f.effectiveFrom).slice(0,10)}</td>
+      <td class="txt-muted">${escapeHtml(f.source)}</td>
+    </tr>`).join('');
+  }
+
+  $('c-range').addEventListener('change', loadFootprint);
+  $('c-add').addEventListener('click', () => {
+    const form = document.createElement('div');
+    const opts = ['electricity','gas','water','steam','heat','coal']
+      .map(t => `<option value="${t}">${ENERGY_LABEL[t]}</option>`).join('');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>能源类型</label><select class="iecsp-select" id="ff-et">${opts}</select></div>
+        <div class="iecsp-form-row"><label>因子值</label><input class="iecsp-input" id="ff-val" type="number" step="0.0001"/></div>
+        <div class="iecsp-form-row"><label>单位</label><input class="iecsp-input" id="ff-unit" placeholder="如 kWh"/></div>
+        <div class="iecsp-form-row"><label>生效起始</label><input class="iecsp-input" id="ff-from" type="datetime-local"/></div>
+        <div class="iecsp-form-row" style="grid-column:1/-1"><label>来源说明</label><input class="iecsp-input" id="ff-src" placeholder="如:生态环境部 2024"/></div>
+      </div>`;
+    modal({
+      title: '新增排放因子',
+      body: form,
+      onConfirm: async () => {
+        const body = {
+          energyType: form.querySelector('#ff-et').value,
+          factor: parseFloat(form.querySelector('#ff-val').value),
+          unit: form.querySelector('#ff-unit').value.trim(),
+          effectiveFrom: form.querySelector('#ff-from').value ? new Date(form.querySelector('#ff-from').value).toISOString() : new Date().toISOString(),
+          source: form.querySelector('#ff-src').value.trim() || '自定义'
+        };
+        try {
+          await api('/carbon/factors', { method: 'POST', body });
+          toast('已保存', 'success');
+          loadFactors(); loadFootprint();
+        } catch (ex) { toast(ex.message, 'danger'); return false; }
+      }
+    });
+  });
+
+  await Promise.all([loadFootprint(), loadFactors()]);
+  return {};
+}
+
+
+/* ========== 文件: web/assets/js/pages/quota.js ========== */
+
+// 配额履约
+import { api } from '../core/api.js';
+import { fmtNumber, escapeHtml } from '../core/utils.js';
+import { modal } from '../core/modal.js';
+import { toast } from '../core/toast.js';
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>排放配额 <small>登记年度配额，查看累计使用情况</small></h2></div>
+
+    <section class="grid grid-3" id="q-kpis"></section>
+
+    <iecsp-card class="mt-16">
+      <div class="iecsp-toolbar">
+        <select class="iecsp-select" id="q-period" style="max-width:160px"></select>
+        <div class="spacer"></div>
+        <button class="iecsp-btn" id="q-settle">触发结算</button>
+        <button class="iecsp-btn is-primary" id="q-add">新增/调整配额</button>
+      </div>
+      <table class="iecsp-table">
+        <thead><tr><th>履约年度</th><th>组织</th><th>来源</th><th>分配 (tCO₂e)</th><th>已用 (tCO₂e)</th><th>使用率</th><th>状态</th></tr></thead>
+        <tbody id="q-rows"></tbody>
+      </table>
+    </iecsp-card>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+  const periodSel = $('q-period');
+  const cur = new Date().getUTCFullYear();
+  for (let y = cur + 1; y >= cur - 3; y--) {
+    const o = document.createElement('option'); o.value = String(y); o.textContent = `${y} 履约年度`;
+    if (y === cur) o.selected = true;
+    periodSel.appendChild(o);
+  }
+
+  let orgs = [];
+  async function loadOrgs() { orgs = (await api('/account/orgs')).data; }
+
+  async function load() {
+    const r = await api('/quota/overview?period=' + periodSel.value);
+    const d = r.data;
+    $('q-kpis').innerHTML = [
+      { label: '配额分配', value: fmtNumber(d.totalAllocated, 0), unit: 'tCO₂e' },
+      { label: '已使用',   value: fmtNumber(d.totalUsed, 2), unit: 'tCO₂e' },
+      { label: '使用率',   value: (d.ratio * 100).toFixed(1), unit: '%', tone: d.ratio > 0.85 ? 'warning' : 'primary' }
+    ].map(it => `<iecsp-card>
+      <div class="iecsp-kpi">
+        <div class="iecsp-kpi__label">${it.label}</div>
+        <div class="iecsp-kpi__value" style="${it.tone==='warning'?'color:var(--warning)':''}">${it.value}<span class="unit">${it.unit}</span></div>
+        ${it.label==='使用率'?'<div class="iecsp-bar '+(d.ratio>0.85?'is-warning':'')+'"><span style="width:'+Math.min(100,d.ratio*100).toFixed(1)+'%"></span></div>':''}
+      </div>
+    </iecsp-card>`).join('');
+
+    const rows = (await api('/quota?period=' + periodSel.value)).data;
+    if (!rows.length) { $('q-rows').innerHTML = '<tr><td colspan="7" class="empty">暂无配额记录</td></tr>'; return; }
+    $('q-rows').innerHTML = rows.map(q => {
+      const ratio = q.allocated > 0 ? q.used / q.allocated : 0;
+      const tone = ratio > 1 ? 'is-danger' : ratio > 0.85 ? 'is-warning' : 'is-primary';
+      return `<tr>
+        <td>${q.period}</td>
+        <td>${escapeHtml(q.org?.name || '—')}</td>
+        <td><span class="iecsp-tag is-default">${escapeHtml(q.source)}</span></td>
+        <td>${fmtNumber(q.allocated, 0)}</td>
+        <td>${fmtNumber(q.used, 2)}</td>
+        <td><div class="iecsp-bar ${ratio>0.85?'is-warning':''}" style="max-width:140px"><span style="width:${Math.min(100,ratio*100).toFixed(1)}%"></span></div><div class="txt-muted" style="font-size:11px;margin-top:4px">${(ratio*100).toFixed(1)}%</div></td>
+        <td><span class="iecsp-tag ${tone}">${q.status}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  periodSel.addEventListener('change', load);
+  $('q-settle').addEventListener('click', async () => {
+    try {
+      await api('/quota/settle', { method: 'POST', body: { period: periodSel.value } });
+      toast('结算完成', 'success'); load();
+    } catch (e) { toast(e.message, 'danger'); }
+  });
+  $('q-add').addEventListener('click', () => {
+    const form = document.createElement('div');
+    const orgOpts = orgs.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>履约年度</label><input class="iecsp-input" id="qf-period" value="${periodSel.value}" pattern="\\d{4}"/></div>
+        <div class="iecsp-form-row"><label>组织</label><select class="iecsp-select" id="qf-org">${orgOpts}</select></div>
+        <div class="iecsp-form-row"><label>分配额 (tCO₂e)</label><input class="iecsp-input" id="qf-alloc" type="number" step="1"/></div>
+        <div class="iecsp-form-row"><label>来源</label><select class="iecsp-select" id="qf-src"><option value="government">政府无偿分配</option><option value="market">市场购买</option><option value="offset">CCER 抵消</option></select></div>
+        <div class="iecsp-form-row" style="grid-column:1/-1"><label>备注</label><input class="iecsp-input" id="qf-remark"/></div>
+      </div>`;
+    modal({
+      title: '配额登记',
+      body: form,
+      onConfirm: async () => {
+        const body = {
+          period: form.querySelector('#qf-period').value,
+          orgId: +form.querySelector('#qf-org').value,
+          allocated: parseFloat(form.querySelector('#qf-alloc').value),
+          source: form.querySelector('#qf-src').value,
+          remark: form.querySelector('#qf-remark').value.trim() || undefined
+        };
+        try {
+          await api('/quota', { method: 'POST', body });
+          toast('已保存', 'success'); load();
+        } catch (e) { toast(e.message, 'danger'); return false; }
+      }
+    });
+  });
+
+  await loadOrgs();
+  await load();
+  return {};
+}
+
+
+/* ========== 文件: web/assets/js/pages/risk.js ========== */
+
+// 风险预警
+import { api } from '../core/api.js';
+import { fmtTime, ago, escapeHtml, SEVERITY_LABEL, SEVERITY_TAG, STATUS_LABEL } from '../core/utils.js';
+import { modal } from '../core/modal.js';
+import { toast } from '../core/toast.js';
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>报警管理 <small>触发规则、处理记录</small></h2></div>
+
+    <iecsp-card class="mt-0">
+      <div class="iecsp-toolbar">
+        <select class="iecsp-select" id="r-status" style="max-width:160px">
+          <option value="">全部状态</option>
+          <option value="open" selected>未处置</option>
+          <option value="acknowledged">处置中</option>
+          <option value="closed">已闭环</option>
+        </select>
+        <select class="iecsp-select" id="r-sev" style="max-width:160px">
+          <option value="">全部严重度</option>
+          <option value="critical">严重</option>
+          <option value="warning">警告</option>
+          <option value="info">提示</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="iecsp-btn" id="r-refresh">刷新</button>
+      </div>
+      <table class="iecsp-table">
+        <thead><tr><th>发生时间</th><th>严重度</th><th>计量点</th><th>规则</th><th>读数</th><th>消息</th><th>状态</th><th class="action-col">操作</th></tr></thead>
+        <tbody id="r-rows"></tbody>
+      </table>
+    </iecsp-card>
+
+    <iecsp-card class="mt-16" title="报警规则" hint="规则触发后生成事件，有冷却时间">
+      <div class="iecsp-toolbar"><div class="spacer"></div><button class="iecsp-btn is-primary sm" id="r-add-rule">新增规则</button></div>
+      <table class="iecsp-table">
+        <thead><tr><th>编号</th><th>名称</th><th>范围</th><th>指标</th><th>条件</th><th>严重度</th><th>启用</th></tr></thead>
+        <tbody id="r-rules"></tbody>
+      </table>
+    </iecsp-card>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+
+  async function load() {
+    const params = new URLSearchParams();
+    if ($('r-status').value) params.set('status', $('r-status').value);
+    if ($('r-sev').value) params.set('severity', $('r-sev').value);
+    const evs = await api('/risk/events' + (params.toString() ? '?' + params.toString() : ''));
+    const rows = evs.data;
+    if (!rows.length) { $('r-rows').innerHTML = '<tr><td colspan="8" class="empty">暂无事件</td></tr>'; }
+    else $('r-rows').innerHTML = rows.map(e => `<tr>
+      <td>${fmtTime(e.occurredAt, true)}<div class="txt-dim" style="font-size:11px">${ago(e.occurredAt)}</div></td>
+      <td><span class="iecsp-tag ${SEVERITY_TAG[e.severity] || 'is-default'}">${SEVERITY_LABEL[e.severity] || e.severity}</span></td>
+      <td>${e.meter ? escapeHtml(e.meter.name) + '<div class="txt-dim" style="font-size:11px">'+escapeHtml(e.meter.code)+'</div>' : '<span class="txt-dim">—</span>'}</td>
+      <td>${escapeHtml(e.rule?.name || '')}<div class="txt-dim" style="font-size:11px">${escapeHtml(e.rule?.code || '')}</div></td>
+      <td><strong>${e.value ?? '—'}</strong></td>
+      <td>${escapeHtml(e.message)}</td>
+      <td><span class="iecsp-tag ${e.status==='closed'?'is-default':e.status==='acknowledged'?'is-accent':'is-warning'}">${STATUS_LABEL[e.status] || e.status}</span></td>
+      <td class="action-col">
+        ${e.status==='open' ? `<button class="iecsp-btn sm" data-act="ack" data-id="${e.id}">认领处置</button>`:''}
+        ${e.status!=='closed' ? `<button class="iecsp-btn sm" data-act="close" data-id="${e.id}">闭环</button>`:''}
+      </td>
+    </tr>`).join('');
+
+    const rules = (await api('/risk/rules')).data;
+    if (!rules.length) { $('r-rules').innerHTML = '<tr><td colspan="7" class="empty">暂无规则</td></tr>'; }
+    else $('r-rules').innerHTML = rules.map(r => `<tr>
+      <td><code style="font-size:12px">${escapeHtml(r.code)}</code></td>
+      <td>${escapeHtml(r.name)}</td>
+      <td><span class="iecsp-tag is-default">${r.scope}</span></td>
+      <td>${escapeHtml(r.metric)}</td>
+      <td>${escapeHtml(r.operator)} ${escapeHtml(r.threshold)}</td>
+      <td><span class="iecsp-tag ${SEVERITY_TAG[r.severity] || 'is-default'}">${SEVERITY_LABEL[r.severity] || r.severity}</span></td>
+      <td>${r.enabled ? '<span class="iecsp-tag is-primary">是</span>' : '<span class="iecsp-tag is-default">否</span>'}</td>
+    </tr>`).join('');
+  }
+
+  $('r-status').addEventListener('change', load);
+  $('r-sev').addEventListener('change', load);
+  $('r-refresh').addEventListener('click', load);
+
+  $('r-rows').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-act]'); if (!t) return;
+    const id = +t.getAttribute('data-id');
+    const act = t.getAttribute('data-act');
+    try {
+      if (act === 'ack') await api('/risk/events/' + id + '/ack', { method: 'POST' });
+      else {
+        const note = prompt('闭环说明(可选):') || '';
+        await api('/risk/events/' + id + '/close', { method: 'POST', body: { note } });
+      }
+      toast('已更新', 'success'); load();
+    } catch (ex) { toast(ex.message, 'danger'); }
+  });
+
+  $('r-add-rule').addEventListener('click', () => {
+    const form = document.createElement('div');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>编号</label><input class="iecsp-input" id="rr-code"/></div>
+        <div class="iecsp-form-row"><label>名称</label><input class="iecsp-input" id="rr-name"/></div>
+        <div class="iecsp-form-row"><label>范围</label><select class="iecsp-select" id="rr-scope"><option value="meter">计量点</option><option value="org">组织</option><option value="global">全局</option></select></div>
+        <div class="iecsp-form-row"><label>指标</label><select class="iecsp-select" id="rr-metric"><option value="value">瞬时值</option><option value="quota_ratio">配额使用率</option></select></div>
+        <div class="iecsp-form-row"><label>操作符</label><select class="iecsp-select" id="rr-op"><option value="gt">大于</option><option value="gte">≥</option><option value="lt">小于</option><option value="lte">≤</option></select></div>
+        <div class="iecsp-form-row"><label>阈值</label><input class="iecsp-input" id="rr-th" placeholder="如 5000"/></div>
+        <div class="iecsp-form-row"><label>严重度</label><select class="iecsp-select" id="rr-sev"><option value="info">提示</option><option value="warning" selected>警告</option><option value="critical">严重</option></select></div>
+        <div class="iecsp-form-row"><label>冷却(秒)</label><input class="iecsp-input" id="rr-cd" type="number" value="300"/></div>
+      </div>`;
+    modal({
+      title: '新增风险规则',
+      body: form,
+      onConfirm: async () => {
+        const body = {
+          code: form.querySelector('#rr-code').value.trim(),
+          name: form.querySelector('#rr-name').value.trim(),
+          scope: form.querySelector('#rr-scope').value,
+          metric: form.querySelector('#rr-metric').value,
+          operator: form.querySelector('#rr-op').value,
+          threshold: form.querySelector('#rr-th').value.trim(),
+          severity: form.querySelector('#rr-sev').value,
+          cooldownSec: +form.querySelector('#rr-cd').value
+        };
+        try { await api('/risk/rules', { method: 'POST', body }); toast('已保存', 'success'); load(); }
+        catch (ex) { toast(ex.message, 'danger'); return false; }
+      }
+    });
+  });
+
+  await load();
+  const onWs = () => load();
+  window.addEventListener('iecsp:ws:risk', onWs);
+  return { dispose() { window.removeEventListener('iecsp:ws:risk', onWs); } };
+}
+
+
+/* ========== 文件: web/assets/js/pages/report.js ========== */
+
+// 监管报送
+import { api } from '../core/api.js';
+import { fmtTime, escapeHtml } from '../core/utils.js';
+import { modal } from '../core/modal.js';
+import { toast } from '../core/toast.js';
+
+const CHANNEL = { gov_energy: '能耗政府上报', gov_carbon: '碳排放政府上报', mrv: 'MRV 第三方核查' };
+const STATUS  = { pending: '待提交', submitted: '已提交', accepted: '已受理', rejected: '已驳回' };
+const STATUS_TAG = { pending: 'is-default', submitted: 'is-accent', accepted: 'is-primary', rejected: 'is-danger' };
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>数据报送 <small>对外报送记录与回执</small></h2></div>
+    <iecsp-card>
+      <div class="iecsp-toolbar">
+        <select class="iecsp-select" id="rp-channel" style="max-width:200px">
+          <option value="">全部通道</option>
+          <option value="gov_energy">能耗政府上报</option>
+          <option value="gov_carbon">碳排放政府上报</option>
+          <option value="mrv">MRV 核查</option>
+        </select>
+        <input class="iecsp-input" id="rp-period" placeholder="期次 YYYYMM 或 YYYY" style="max-width:200px"/>
+        <div class="spacer"></div>
+        <button class="iecsp-btn is-primary" id="rp-prepare">准备新报送</button>
+      </div>
+      <table class="iecsp-table">
+        <thead><tr><th>期次</th><th>通道</th><th>组织</th><th>状态</th><th>创建时间</th><th>提交时间</th><th>受理时间</th><th class="action-col">操作</th></tr></thead>
+        <tbody id="rp-rows"></tbody>
+      </table>
+    </iecsp-card>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+  let orgs = [];
+  async function loadOrgs() { orgs = (await api('/account/orgs')).data; }
+
+  async function load() {
+    const q = new URLSearchParams();
+    if ($('rp-channel').value) q.set('channel', $('rp-channel').value);
+    if ($('rp-period').value)  q.set('period', $('rp-period').value);
+    const r = await api('/report' + (q.toString() ? '?' + q.toString() : ''));
+    if (!r.data.length) { $('rp-rows').innerHTML = '<tr><td colspan="8" class="empty">暂无报送记录</td></tr>'; return; }
+    $('rp-rows').innerHTML = r.data.map(it => `<tr>
+      <td>${escapeHtml(it.period)}</td>
+      <td>${CHANNEL[it.channel] || it.channel}</td>
+      <td>${escapeHtml(it.org?.name || '—')}</td>
+      <td><span class="iecsp-tag ${STATUS_TAG[it.status]}">${STATUS[it.status] || it.status}</span></td>
+      <td class="txt-muted">${fmtTime(it.createdAt)}</td>
+      <td class="txt-muted">${it.submittedAt ? fmtTime(it.submittedAt) : '—'}</td>
+      <td class="txt-muted">${it.acceptedAt ? fmtTime(it.acceptedAt) : '—'}</td>
+      <td class="action-col">
+        <button class="iecsp-btn sm" data-act="view" data-id="${it.id}">查看</button>
+        ${it.status==='pending'  ? `<button class="iecsp-btn is-primary sm" data-act="submit" data-id="${it.id}">提交</button>`:''}
+        ${it.status==='submitted'? `<button class="iecsp-btn sm" data-act="mark-ok" data-id="${it.id}">标记受理</button>`:''}
+        ${it.status==='submitted'? `<button class="iecsp-btn sm" data-act="mark-no" data-id="${it.id}">标记驳回</button>`:''}
+      </td>
+    </tr>`).join('');
+  }
+
+  $('rp-channel').addEventListener('change', load);
+  $('rp-period').addEventListener('change', load);
+
+  $('rp-prepare').addEventListener('click', () => {
+    const form = document.createElement('div');
+    const orgOpts = orgs.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>期次</label><input class="iecsp-input" id="pp-period" placeholder="YYYYMM 或 YYYY"/></div>
+        <div class="iecsp-form-row"><label>组织</label><select class="iecsp-select" id="pp-org">${orgOpts}</select></div>
+        <div class="iecsp-form-row" style="grid-column:1/-1"><label>通道</label><select class="iecsp-select" id="pp-channel"><option value="gov_energy">能耗政府上报</option><option value="gov_carbon">碳排放政府上报</option><option value="mrv">MRV 核查</option></select></div>
+      </div>`;
+    modal({
+      title: '准备报送',
+      body: form,
+      onConfirm: async () => {
+        const body = {
+          period: form.querySelector('#pp-period').value.trim(),
+          orgId: +form.querySelector('#pp-org').value,
+          channel: form.querySelector('#pp-channel').value
+        };
+        try { await api('/report/prepare', { method: 'POST', body }); toast('已生成快照', 'success'); load(); }
+        catch (e) { toast(e.message, 'danger'); return false; }
+      }
+    });
+  });
+
+  $('rp-rows').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-act]'); if (!t) return;
+    const id = +t.getAttribute('data-id');
+    const act = t.getAttribute('data-act');
+    try {
+      if (act === 'submit') { await api(`/report/${id}/submit`, { method: 'POST' }); toast('已提交', 'success'); }
+      else if (act === 'mark-ok') { await api(`/report/${id}/mark`, { method: 'POST', body: { status: 'accepted' } }); toast('已标记受理', 'success'); }
+      else if (act === 'mark-no') {
+        const reason = prompt('驳回原因') || '';
+        await api(`/report/${id}/mark`, { method: 'POST', body: { status: 'rejected', reason } });
+        toast('已标记驳回', 'warning');
+      } else if (act === 'view') {
+        const all = (await api('/report')).data;
+        const it = all.find(x => x.id === id);
+        if (!it) return;
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'background:var(--bg-2);padding:12px;border-radius:6px;overflow:auto;max-height:50vh;font-size:12px;color:var(--fg-muted)';
+        try { pre.textContent = JSON.stringify(JSON.parse(it.payloadJson), null, 2); } catch { pre.textContent = it.payloadJson; }
+        modal({ title: `报送快照 #${id}`, body: pre, confirmText: '关闭', cancelText: '' });
+        return;
+      }
+      load();
+    } catch (ex) { toast(ex.message, 'danger'); }
+  });
+
+  await loadOrgs();
+  await load();
+  return {};
+}
+
+
+/* ========== 文件: web/assets/js/pages/account.js ========== */
+
+// 组织账户 + 审计
+import { api } from '../core/api.js';
+import { fmtTime, ROLE_LABEL, escapeHtml } from '../core/utils.js';
+import { modal } from '../core/modal.js';
+import { toast } from '../core/toast.js';
+
+const ROLE_OPTS = ['platform_admin','park_admin','data_steward','observer'];
+
+export async function render(host) {
+  host.innerHTML = `
+    <div class="iecsp-page-title"><h2>用户与组织 <small>组织结构、账户、操作日志</small></h2></div>
+
+    <section class="grid grid-2">
+      <iecsp-card title="组织结构">
+        <div class="iecsp-toolbar"><div class="spacer"></div><button class="iecsp-btn is-primary sm" id="ac-add-org">新增组织</button></div>
+        <table class="iecsp-table">
+          <thead><tr><th>编号</th><th>名称</th><th>类型</th><th>上级</th><th>备注</th></tr></thead>
+          <tbody id="ac-orgs"></tbody>
+        </table>
+      </iecsp-card>
+
+      <iecsp-card title="账户">
+        <div class="iecsp-toolbar"><div class="spacer"></div><button class="iecsp-btn is-primary sm" id="ac-add-user">新增账户</button></div>
+        <table class="iecsp-table">
+          <thead><tr><th>账号</th><th>姓名</th><th>角色</th><th>组织</th><th>状态</th><th>最近登录</th><th class="action-col">操作</th></tr></thead>
+          <tbody id="ac-users"></tbody>
+        </table>
+      </iecsp-card>
+    </section>
+
+    <iecsp-card class="mt-16" title="操作日志" hint="最近 200 条">
+      <table class="iecsp-table">
+        <thead><tr><th>时间</th><th>账号</th><th>动作</th><th>对象</th><th>详情</th><th>IP</th></tr></thead>
+        <tbody id="ac-audits"></tbody>
+      </table>
+    </iecsp-card>
+  `;
+
+  const $ = (id) => document.getElementById(id);
+
+  async function load() {
+    const [orgs, users, audits] = await Promise.all([
+      api('/account/orgs'), api('/account/accounts'), api('/account/audits?limit=200')
+    ]);
+    paintOrgs(orgs.data);
+    paintUsers(users.data, orgs.data);
+    paintAudits(audits.data);
+  }
+
+  function paintOrgs(rows) {
+    const map = new Map(rows.map(r => [r.id, r]));
+    $('ac-orgs').innerHTML = rows.length ? rows.map(o => `<tr>
+      <td><code style="font-size:12px">${escapeHtml(o.code)}</code></td>
+      <td>${escapeHtml(o.name)}</td>
+      <td><span class="iecsp-tag is-default">${escapeHtml(o.kind)}</span></td>
+      <td>${o.parentId && map.get(o.parentId) ? escapeHtml(map.get(o.parentId).name) : '<span class="txt-dim">—</span>'}</td>
+      <td class="txt-muted">${escapeHtml(o.remark || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">暂无</td></tr>';
+  }
+
+  function paintUsers(rows, orgs) {
+    const orgMap = new Map(orgs.map(o => [o.id, o]));
+    $('ac-users').innerHTML = rows.length ? rows.map(u => `<tr>
+      <td><strong>${escapeHtml(u.username)}</strong></td>
+      <td>${escapeHtml(u.displayName)}</td>
+      <td><span class="iecsp-tag is-accent">${ROLE_LABEL[u.role] || u.role}</span></td>
+      <td>${u.orgId && orgMap.get(u.orgId) ? escapeHtml(orgMap.get(u.orgId).name) : '—'}</td>
+      <td><span class="iecsp-tag ${u.status==='active'?'is-primary':'is-default'}">${u.status}</span></td>
+      <td class="txt-muted">${u.lastLoginAt ? fmtTime(u.lastLoginAt) : '从未登录'}</td>
+      <td class="action-col">
+        <button class="iecsp-btn sm" data-act="edit" data-id="${u.id}">编辑</button>
+        <button class="iecsp-btn sm" data-act="reset" data-id="${u.id}">重置密码</button>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="7" class="empty">暂无</td></tr>';
+  }
+
+  function paintAudits(rows) {
+    $('ac-audits').innerHTML = rows.length ? rows.map(a => `<tr>
+      <td class="txt-muted">${fmtTime(a.createdAt, true)}</td>
+      <td>${a.account ? escapeHtml(a.account.username) : '<span class="txt-dim">—</span>'}</td>
+      <td><code style="font-size:12px">${escapeHtml(a.action)}</code></td>
+      <td>${escapeHtml(a.target || '')}</td>
+      <td class="txt-muted">${escapeHtml(a.detail || '')}</td>
+      <td class="txt-dim" style="font-size:11px">${escapeHtml(a.ip || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">暂无</td></tr>';
+  }
+
+  $('ac-orgs').addEventListener('click', () => {});
+
+  $('ac-add-org').addEventListener('click', async () => {
+    const orgs = (await api('/account/orgs')).data;
+    const form = document.createElement('div');
+    const parent = '<option value="">无</option>' + orgs.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>编号</label><input class="iecsp-input" id="o-code"/></div>
+        <div class="iecsp-form-row"><label>名称</label><input class="iecsp-input" id="o-name"/></div>
+        <div class="iecsp-form-row"><label>类型</label><select class="iecsp-select" id="o-kind"><option value="park">园区</option><option value="enterprise" selected>企业</option><option value="workshop">车间</option></select></div>
+        <div class="iecsp-form-row"><label>上级</label><select class="iecsp-select" id="o-parent">${parent}</select></div>
+        <div class="iecsp-form-row" style="grid-column:1/-1"><label>备注</label><input class="iecsp-input" id="o-remark"/></div>
+      </div>`;
+    modal({
+      title: '新增组织', body: form,
+      onConfirm: async () => {
+        const body = {
+          code: form.querySelector('#o-code').value.trim(),
+          name: form.querySelector('#o-name').value.trim(),
+          kind: form.querySelector('#o-kind').value,
+          parentId: form.querySelector('#o-parent').value ? +form.querySelector('#o-parent').value : undefined,
+          remark: form.querySelector('#o-remark').value.trim() || undefined
+        };
+        try { await api('/account/orgs', { method: 'POST', body }); toast('已保存', 'success'); load(); }
+        catch (e) { toast(e.message, 'danger'); return false; }
+      }
+    });
+  });
+
+  $('ac-add-user').addEventListener('click', async () => {
+    const orgs = (await api('/account/orgs')).data;
+    const form = document.createElement('div');
+    const orgOpts = '<option value="">无</option>' + orgs.map(o => `<option value="${o.id}">${escapeHtml(o.name)}</option>`).join('');
+    const roleOpts = ROLE_OPTS.map(r => `<option value="${r}">${ROLE_LABEL[r]}</option>`).join('');
+    form.innerHTML = `
+      <div class="iecsp-form-grid">
+        <div class="iecsp-form-row"><label>账号</label><input class="iecsp-input" id="u-username"/></div>
+        <div class="iecsp-form-row"><label>姓名</label><input class="iecsp-input" id="u-name"/></div>
+        <div class="iecsp-form-row"><label>初始密码</label><input class="iecsp-input" id="u-pwd" type="password" placeholder="至少 8 位"/></div>
+        <div class="iecsp-form-row"><label>角色</label><select class="iecsp-select" id="u-role">${roleOpts}</select></div>
+        <div class="iecsp-form-row" style="grid-column:1/-1"><label>组织</label><select class="iecsp-select" id="u-org">${orgOpts}</select></div>
+      </div>`;
+    modal({
+      title: '新增账户', body: form,
+      onConfirm: async () => {
+        const body = {
+          username: form.querySelector('#u-username').value.trim(),
+          displayName: form.querySelector('#u-name').value.trim(),
+          password: form.querySelector('#u-pwd').value,
+          role: form.querySelector('#u-role').value,
+          orgId: form.querySelector('#u-org').value ? +form.querySelector('#u-org').value : undefined
+        };
+        try { await api('/account/accounts', { method: 'POST', body }); toast('已创建', 'success'); load(); }
+        catch (e) { toast(e.message, 'danger'); return false; }
+      }
+    });
+  });
+
+  $('ac-users').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-act]'); if (!t) return;
+    const id = +t.getAttribute('data-id');
+    const act = t.getAttribute('data-act');
+    if (act === 'reset') {
+      const pwd = prompt('请输入新密码(至少 8 位):'); if (!pwd) return;
+      try { await api(`/account/accounts/${id}/reset`, { method: 'POST', body: { newPassword: pwd } }); toast('已重置', 'success'); }
+      catch (ex) { toast(ex.message, 'danger'); }
+    } else if (act === 'edit') {
+      const users = (await api('/account/accounts')).data;
+      const orgs = (await api('/account/orgs')).data;
+      const u = users.find(x => x.id === id); if (!u) return;
+      const form = document.createElement('div');
+      const orgOpts = '<option value="">无</option>' + orgs.map(o => `<option value="${o.id}" ${u.orgId===o.id?'selected':''}>${escapeHtml(o.name)}</option>`).join('');
+      const roleOpts = ROLE_OPTS.map(r => `<option value="${r}" ${u.role===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('');
+      form.innerHTML = `
+        <div class="iecsp-form-grid">
+          <div class="iecsp-form-row"><label>姓名</label><input class="iecsp-input" id="u-name" value="${escapeHtml(u.displayName)}"/></div>
+          <div class="iecsp-form-row"><label>角色</label><select class="iecsp-select" id="u-role">${roleOpts}</select></div>
+          <div class="iecsp-form-row"><label>状态</label><select class="iecsp-select" id="u-status"><option value="active" ${u.status==='active'?'selected':''}>启用</option><option value="disabled" ${u.status==='disabled'?'selected':''}>停用</option></select></div>
+          <div class="iecsp-form-row"><label>组织</label><select class="iecsp-select" id="u-org">${orgOpts}</select></div>
+        </div>`;
+      modal({
+        title: `编辑账户 ${u.username}`, body: form,
+        onConfirm: async () => {
+          const body = {
+            displayName: form.querySelector('#u-name').value.trim(),
+            role: form.querySelector('#u-role').value,
+            status: form.querySelector('#u-status').value,
+            orgId: form.querySelector('#u-org').value ? +form.querySelector('#u-org').value : undefined
+          };
+          try { await api(`/account/accounts/${id}`, { method: 'PUT', body }); toast('已保存', 'success'); load(); }
+          catch (ex) { toast(ex.message, 'danger'); return false; }
+        }
+      });
+    }
+  });
+
+  await load();
+  return {};
+}

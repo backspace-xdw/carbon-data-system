@@ -79,7 +79,7 @@ async function bootstrap() {
   mqttBus.start();
 
   await app.listen({ host: env.HOST, port: env.PORT });
-  logger.info({ host: env.HOST, port: env.PORT }, 'iecsp-server listening');
+  logger.info({ host: env.HOST, port: env.PORT }, 'carbon-server listening');
 
   const shutdown = async (sig: string) => {
     logger.info({ sig }, 'shutting down');

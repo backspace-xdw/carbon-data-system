@@ -1,42 +1,42 @@
-name: iecsp
+name: carbon-rt
 
 services:
   influxdb:
     image: influxdb:2.7
-    container_name: iecsp-influxdb
+    container_name: carbon-influxdb
     restart: unless-stopped
     ports:
       - "8086:8086"
     environment:
       DOCKER_INFLUXDB_INIT_MODE: setup
-      DOCKER_INFLUXDB_INIT_USERNAME: iecsp
-      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD:-iecsp-2026-pass}
-      DOCKER_INFLUXDB_INIT_ORG: iecsp
+      DOCKER_INFLUXDB_INIT_USERNAME: carbon
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD:-carbon-2026-pass}
+      DOCKER_INFLUXDB_INIT_ORG: carbon-rt
       DOCKER_INFLUXDB_INIT_BUCKET: energy_stream
       DOCKER_INFLUXDB_INIT_RETENTION: 30d
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-iecsp-token-2026}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-carbon-token-2026}
     volumes:
-      - iecsp_influx_data:/var/lib/influxdb2
-      - iecsp_influx_config:/etc/influxdb2
+      - carbon_influx_data:/var/lib/influxdb2
+      - carbon_influx_config:/etc/influxdb2
 
   mosquitto:
     image: eclipse-mosquitto:2
-    container_name: iecsp-mosquitto
+    container_name: carbon-mosquitto
     restart: unless-stopped
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes:
       - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - iecsp_mqtt_data:/mosquitto/data
-      - iecsp_mqtt_log:/mosquitto/log
+      - carbon_mqtt_data:/mosquitto/data
+      - carbon_mqtt_log:/mosquitto/log
 
-  iecsp-server:
+  carbon-server:
     profiles: ["full"]
     build:
       context: .
       dockerfile: ./docker/server.Dockerfile
-    container_name: iecsp-server
+    container_name: carbon-server
     restart: unless-stopped
     depends_on:
       - influxdb
@@ -47,14 +47,14 @@ services:
       NODE_ENV: production
       PORT: 7090
       INFLUX_URL: http://influxdb:8086
-      INFLUX_TOKEN: ${INFLUX_TOKEN:-iecsp-token-2026}
-      INFLUX_ORG: iecsp
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-carbon-token-2026}
+      INFLUX_ORG: carbon-rt
       INFLUX_BUCKET_REALTIME: energy_stream
       MQTT_URL: mqtt://mosquitto:1883
       JWT_SECRET: ${JWT_SECRET:-please-change}
 
 volumes:
-  iecsp_influx_data:
-  iecsp_influx_config:
-  iecsp_mqtt_data:
-  iecsp_mqtt_log:
+  carbon_influx_data:
+  carbon_influx_config:
+  carbon_mqtt_data:
+  carbon_mqtt_log:

@@ -6,10 +6,10 @@ import { toast } from '../core/toast.js';
 
 export async function render(host) {
   host.innerHTML = `
-    <div class="iecsp-page-title"><h2>碳足迹核算 <small>排放因子库 · 区间核算 · 归档</small></h2></div>
+    <div class="iecsp-page-title"><h2>碳排放核算 <small>排放因子和区间核算结果</small></h2></div>
 
     <section class="grid grid-2-1">
-      <iecsp-card title="区间核算" hint="按能源类型分解 CO₂e">
+      <iecsp-card title="按时段核算" hint="按能源类型分解 CO₂e">
         <div class="iecsp-toolbar">
           <select class="iecsp-select" id="c-range" style="max-width:180px">
             <option value="-30d" selected>近 30 天</option>
@@ -27,7 +27,7 @@ export async function render(host) {
         </table>
       </iecsp-card>
 
-      <iecsp-card title="排放因子库" hint="可按生效期版本管理">
+      <iecsp-card title="排放因子" hint="按生效日期管理多个版本">
         <div class="iecsp-toolbar">
           <div class="spacer"></div>
           <button class="iecsp-btn is-primary sm" id="c-add">新增因子</button>
