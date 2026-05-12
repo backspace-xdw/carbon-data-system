@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>登录 · 工业能碳协同管控平台</title>
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
+  <link rel="stylesheet" href="/assets/css/reset.css" />
+  <link rel="stylesheet" href="/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+  <link rel="stylesheet" href="/assets/css/login.css" />
+</head>
+<body>
+  <main class="login-stage">
+    <section class="login-stage__hero" aria-hidden="true">
+      <header class="login-hero__brand">
+        <span class="mark">能</span>
+        <div>
+          <h1>工业能碳协同管控平台</h1>
+          <small>Industrial Energy-Carbon Synergy Platform</small>
+        </div>
+      </header>
+
+      <div class="login-hero__copy">
+        <h2>把每一度电、每一吨气<br/>核算到 CO₂e</h2>
+        <p>面向工业园区与制造企业的能源效率与碳排放协同管控平台。计量 → 核算 → 履约 → 预警 → 报送，闭环可追溯。</p>
+      </div>
+
+      <div class="login-hero__cards">
+        <article>
+          <h4>多源接入</h4>
+          <p>电/气/水/蒸汽/热/煤 六类能源,MQTT/HTTP 灵活上送</p>
+        </article>
+        <article>
+          <h4>因子可配</h4>
+          <p>排放因子库,支持按生效期切换,核算可溯源</p>
+        </article>
+        <article>
+          <h4>履约视角</h4>
+          <p>配额按年/按组织绑定,使用进度与缺口实时呈现</p>
+        </article>
+        <article>
+          <h4>风险事件流</h4>
+          <p>规则触发→事件流转→闭环归档,审计可查</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="login-stage__panel">
+      <form class="login-form" id="login-form" autocomplete="on" novalidate>
+        <h3>欢迎回来</h3>
+        <p class="lead">请使用平台账号登录</p>
+
+        <label class="iecsp-form-row">
+          <span>账号</span>
+          <input class="iecsp-input" type="text" name="username" required autocomplete="username" placeholder="admin / steward / observer" />
+        </label>
+
+        <label class="iecsp-form-row">
+          <span>密码</span>
+          <input class="iecsp-input" type="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+        </label>
+
+        <div class="err" id="login-err" hidden></div>
+
+        <button class="iecsp-btn is-primary" type="submit" id="login-submit">登 录</button>
+
+        <aside class="hint-accounts">
+          <div>开发示例账号:</div>
+          <div><code>admin</code> / <code>Iecsp@2026</code> — 平台管理员</div>
+          <div><code>steward</code> / <code>Steward@2026</code> — 数据员</div>
+          <div><code>observer</code> / <code>Observer@2026</code> — 观察员</div>
+        </aside>
+
+        <p class="login-foot">© IECSP · v2.0</p>
+      </form>
+    </section>
+  </main>
+
+  <script type="module">
+    import { api, setToken } from '/assets/js/core/api.js';
+
+    const form = document.getElementById('login-form');
+    const err = document.getElementById('login-err');
+    const submit = document.getElementById('login-submit');
+
+    if (localStorage.getItem('iecsp.token')) {
+      location.replace('/');
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      const fd = new FormData(form);
+      const username = String(fd.get('username') || '').trim();
+      const password = String(fd.get('password') || '');
+      if (!username || password.length < 6) {
+        err.textContent = '账号或密码格式不正确';
+        err.hidden = false;
+        return;
+      }
+      submit.disabled = true;
+      submit.innerHTML = '<span class="iecsp-loading"></span> 登录中…';
+      try {
+        const res = await api('/auth/login', { method: 'POST', body: { username, password } });
+        setToken(res.data.token);
+        location.replace('/');
+      } catch (ex) {
+        err.textContent = ex.message || '登录失败';
+        err.hidden = false;
+      } finally {
+        submit.disabled = false;
+        submit.textContent = '登 录';
+      }
+    });
+  </script>
+</body>
+</html>

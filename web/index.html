@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>工业能碳协同管控平台</title>
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="icon" type="image/svg+xml" href="/assets/icons/brand.svg" />
+  <link rel="stylesheet" href="/assets/css/reset.css" />
+  <link rel="stylesheet" href="/assets/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/css/layout.css" />
+  <link rel="stylesheet" href="/assets/css/components.css" />
+</head>
+<body>
+  <div class="iecsp-shell">
+    <aside class="iecsp-side">
+      <div class="iecsp-side__brand">
+        <span class="mark">能</span>
+        <div>
+          <h1>能碳协同平台</h1>
+          <small>IECSP v2</small>
+        </div>
+      </div>
+      <nav class="iecsp-nav" id="nav-root"></nav>
+    </aside>
+
+    <header class="iecsp-top">
+      <div class="iecsp-top__crumb" id="crumb"></div>
+      <div class="iecsp-top__spacer"></div>
+      <button class="iecsp-top__action" id="btn-toast" title="实时连接状态" aria-label="实时连接">
+        <span id="ws-dot" style="width:8px;height:8px;border-radius:50%;background:var(--fg-dim);display:inline-block"></span>
+      </button>
+      <div class="iecsp-top__profile" id="profile">
+        <span class="avatar" id="avatar">·</span>
+        <span id="profile-name" class="txt-muted">…</span>
+      </div>
+      <button class="iecsp-btn is-ghost sm" id="btn-logout">退出</button>
+    </header>
+
+    <main class="iecsp-main" id="view-host">
+      <div style="padding:48px 0;text-align:center;color:var(--fg-dim)">
+        <span class="iecsp-loading"></span>&nbsp;&nbsp;载入中…
+      </div>
+    </main>
+  </div>
+
+  <div class="iecsp-toasts" id="toasts"></div>
+  <div id="modal-host"></div>
+
+  <script type="module" src="/assets/js/main.js"></script>
+</body>
+</html>

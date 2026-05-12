@@ -1,65 +1,60 @@
-version: '3.8'
+name: iecsp
 
 services:
   influxdb:
-    image: influxdb:2.7-alpine
-    container_name: carbon-influxdb
+    image: influxdb:2.7
+    container_name: iecsp-influxdb
+    restart: unless-stopped
     ports:
       - "8086:8086"
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD:-carbon2024!}
-      - DOCKER_INFLUXDB_INIT_ORG=carbon-system
-      - DOCKER_INFLUXDB_INIT_BUCKET=energy_realtime
-      - DOCKER_INFLUXDB_INIT_RETENTION=7d
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-carbon-system-token-2024}
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: iecsp
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD:-iecsp-2026-pass}
+      DOCKER_INFLUXDB_INIT_ORG: iecsp
+      DOCKER_INFLUXDB_INIT_BUCKET: energy_stream
+      DOCKER_INFLUXDB_INIT_RETENTION: 30d
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN:-iecsp-token-2026}
     volumes:
-      - influxdb_data:/var/lib/influxdb2
-      - influxdb_config:/etc/influxdb2
-      - ./docker/influxdb/init-scripts:/docker-entrypoint-initdb.d
-    networks:
-      - carbon-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "influx", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - iecsp_influx_data:/var/lib/influxdb2
+      - iecsp_influx_config:/etc/influxdb2
 
   mosquitto:
     image: eclipse-mosquitto:2
-    container_name: carbon-mosquitto
+    container_name: iecsp-mosquitto
+    restart: unless-stopped
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
-    networks:
-      - carbon-network
-    restart: unless-stopped
+      - ./docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - iecsp_mqtt_data:/mosquitto/data
+      - iecsp_mqtt_log:/mosquitto/log
 
-  nginx:
-    image: nginx:alpine
-    container_name: carbon-nginx
-    ports:
-      - "${NGINX_PORT:-50002}:80"
-    volumes:
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+  iecsp-server:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: ./docker/server.Dockerfile
+    container_name: iecsp-server
+    restart: unless-stopped
     depends_on:
       - influxdb
-    networks:
-      - carbon-network
-    restart: unless-stopped
+      - mosquitto
+    ports:
+      - "7090:7090"
+    environment:
+      NODE_ENV: production
+      PORT: 7090
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: ${INFLUX_TOKEN:-iecsp-token-2026}
+      INFLUX_ORG: iecsp
+      INFLUX_BUCKET_REALTIME: energy_stream
+      MQTT_URL: mqtt://mosquitto:1883
+      JWT_SECRET: ${JWT_SECRET:-please-change}
 
 volumes:
-  influxdb_data:
-  influxdb_config:
-  mosquitto_data:
-  mosquitto_log:
-
-networks:
-  carbon-network:
-    driver: bridge
+  iecsp_influx_data:
+  iecsp_influx_config:
+  iecsp_mqtt_data:
+  iecsp_mqtt_log:

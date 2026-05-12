@@ -1,0 +1,202 @@
+/* IECSP 组件样式 */
+
+.iecsp-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-1);
+}
+.iecsp-card__head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.iecsp-card__title { font-size: 14px; font-weight: 600; color: var(--fg); }
+.iecsp-card__hint { font-size: 12px; color: var(--fg-muted); }
+.iecsp-card__body { color: var(--fg); }
+
+/* KPI 卡片 */
+.iecsp-kpi { display: flex; flex-direction: column; gap: 8px; }
+.iecsp-kpi__label { font-size: 12px; color: var(--fg-muted); letter-spacing: 0.4px; }
+.iecsp-kpi__value { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+.iecsp-kpi__value .unit { font-size: 13px; color: var(--fg-muted); margin-left: 4px; font-weight: 500; }
+.iecsp-kpi__delta { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.iecsp-kpi__delta.up { color: var(--danger); }
+.iecsp-kpi__delta.down { color: var(--primary); }
+.iecsp-kpi__hint { font-size: 11px; color: var(--fg-dim); }
+
+/* 标签 */
+.iecsp-tag {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+.iecsp-tag.is-default  { background: var(--surface-hi); color: var(--fg-muted); }
+.iecsp-tag.is-primary  { background: var(--primary-soft); color: var(--primary); }
+.iecsp-tag.is-accent   { background: var(--accent-soft); color: var(--accent); }
+.iecsp-tag.is-warning  { background: var(--warning-soft); color: var(--warning); }
+.iecsp-tag.is-danger   { background: var(--danger-soft); color: var(--danger); }
+.iecsp-tag.is-info     { background: var(--info-soft); color: var(--info); }
+
+/* 按钮 */
+.iecsp-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hi);
+  color: var(--fg);
+  background: var(--surface);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  font-size: 13px;
+}
+.iecsp-btn:hover { background: var(--surface-hi); border-color: rgba(148, 163, 184, 0.55); }
+.iecsp-btn.is-primary { background: var(--primary); border-color: var(--primary); color: #08110a; font-weight: 600; }
+.iecsp-btn.is-primary:hover { background: #16a34a; }
+.iecsp-btn.is-accent { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.iecsp-btn.is-accent:hover { background: #2563eb; }
+.iecsp-btn.is-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.iecsp-btn.is-ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+.iecsp-btn.is-ghost:hover { background: var(--surface); color: var(--fg); }
+.iecsp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.iecsp-btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+
+/* 输入 */
+.iecsp-input, .iecsp-select, .iecsp-textarea {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-hi);
+  background: var(--bg-2);
+  color: var(--fg);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.iecsp-textarea { height: auto; padding: 8px 12px; min-height: 80px; resize: vertical; }
+.iecsp-input:focus, .iecsp-select:focus, .iecsp-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.iecsp-form-row { display: flex; flex-direction: column; gap: 6px; }
+.iecsp-form-row label { font-size: 12px; color: var(--fg-muted); }
+.iecsp-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 720px) { .iecsp-form-grid { grid-template-columns: 1fr; } }
+
+/* 表格 */
+.iecsp-table { width: 100%; }
+.iecsp-table thead th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.iecsp-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.iecsp-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+.iecsp-table tbody tr:last-child td { border-bottom: none; }
+.iecsp-table .action-col { width: 1%; white-space: nowrap; }
+.iecsp-table .empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--fg-dim);
+}
+
+/* 工具栏 */
+.iecsp-toolbar {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.iecsp-toolbar .spacer { flex: 1; }
+
+/* 模态 */
+.iecsp-modal {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(2, 8, 23, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 80;
+  padding: 24px;
+}
+.iecsp-modal__panel {
+  width: min(560px, 100%);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.iecsp-modal__head {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.iecsp-modal__body { padding: 18px; max-height: 60vh; overflow-y: auto; }
+.iecsp-modal__foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+
+/* 通知 */
+.iecsp-toasts {
+  position: fixed; right: 16px; bottom: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  z-index: 200;
+}
+.iecsp-toast {
+  min-width: 280px;
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border-left: 4px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: var(--shadow-2);
+  animation: toast-in 0.2s ease;
+}
+.iecsp-toast.is-success { border-left-color: var(--primary); }
+.iecsp-toast.is-warning { border-left-color: var(--warning); }
+.iecsp-toast.is-danger  { border-left-color: var(--danger); }
+@keyframes toast-in { from { transform: translateX(20px); opacity: 0; } }
+
+/* 加载 */
+.iecsp-loading {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border-hi);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 进度条 */
+.iecsp-bar {
+  position: relative;
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.iecsp-bar > span {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transition: width 0.4s ease;
+}
+.iecsp-bar.is-warning > span { background: linear-gradient(90deg, var(--warning), var(--danger)); }
+
+/* 通用排版 */
+.txt-muted { color: var(--fg-muted); }
+.txt-dim   { color: var(--fg-dim); }
+.mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; } .mt-24 { margin-top: 24px; }
+.flex { display: flex; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.gap-8 { gap: 8px; } .gap-12 { gap: 12px; } .gap-16 { gap: 16px; }

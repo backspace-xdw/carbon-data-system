@@ -1,0 +1,177 @@
+// IECSP 关系型模型
+// 时序数据(能源读数、碳排放分钟级)走 InfluxDB,不在此处定义
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ===== 身份与组织 =====
+
+model Organization {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  parentId  Int?
+  kind      String   @default("park") // park / enterprise / workshop
+  remark    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Organization?  @relation("OrgTree", fields: [parentId], references: [id])
+  children Organization[] @relation("OrgTree")
+  accounts Account[]
+  meters   MeterPoint[]
+  quotas   ComplianceQuota[]
+  reports  SubmissionRecord[]
+}
+
+model Account {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique
+  passwordHash  String
+  displayName   String
+  role          String    @default("observer") // platform_admin / park_admin / data_steward / observer
+  orgId         Int?
+  status        String    @default("active")   // active / disabled / locked
+  mustChangePwd Boolean   @default(false)
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  org      Organization? @relation(fields: [orgId], references: [id])
+  audits   AuditLog[]
+}
+
+// ===== 计量点与能源因子 =====
+
+model MeterPoint {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  name        String
+  energyType  String   // electricity / gas / water / steam / heat / coal
+  unit        String   // kWh / m3 / t / GJ
+  orgId       Int
+  location    String?
+  status      String   @default("active") // active / paused / scrapped
+  scaleFactor Float    @default(1.0)
+  mqttTopic   String?  @unique
+  installedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id])
+  riskEvents  RiskEvent[]
+}
+
+model CarbonFactor {
+  id             Int      @id @default(autoincrement())
+  energyType     String
+  factor         Float    // kg CO2e / 单位
+  unit           String   // 与 MeterPoint.unit 一致
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  source         String   // 国标 / 行业 / 自定义
+  remark         String?
+  createdAt      DateTime @default(now())
+
+  @@index([energyType, effectiveFrom])
+}
+
+// ===== 履约配额 =====
+
+model ComplianceQuota {
+  id         Int      @id @default(autoincrement())
+  period     String   // YYYY 年度
+  orgId      Int
+  allocated  Float    // 配额(tCO2e)
+  used       Float    @default(0)
+  source     String   @default("government") // government / market / offset
+  status     String   @default("active") // active / settled / overdue
+  remark     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id])
+
+  @@unique([period, orgId, source])
+}
+
+// ===== 风险规则与事件 =====
+
+model RiskRule {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  name       String
+  scope      String   // meter / org / global
+  metric     String   // value / rate / sum / quota_ratio
+  operator   String   // gt / lt / gte / lte / between / outside
+  threshold  String   // JSON 字符串,如 "[0,100]" 或 "85"
+  severity   String   @default("warning") // info / warning / critical
+  enabled    Boolean  @default(true)
+  cooldownSec Int     @default(300)
+  remark     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  events RiskEvent[]
+}
+
+model RiskEvent {
+  id         Int      @id @default(autoincrement())
+  ruleId     Int
+  meterId    Int?
+  severity   String   @default("warning")
+  occurredAt DateTime @default(now())
+  value      Float?
+  message    String
+  status     String   @default("open") // open / acknowledged / closed
+  handledBy  Int?
+  handledAt  DateTime?
+  closingNote String?
+
+  rule  RiskRule    @relation(fields: [ruleId], references: [id])
+  meter MeterPoint? @relation(fields: [meterId], references: [id])
+
+  @@index([status, occurredAt])
+}
+
+// ===== 监管报送 =====
+
+model SubmissionRecord {
+  id           Int      @id @default(autoincrement())
+  period       String   // YYYYMM / YYYY
+  orgId        Int
+  channel      String   // gov_energy / gov_carbon / mrv
+  status       String   @default("pending") // pending / submitted / accepted / rejected
+  payloadJson  String   // 报送内容快照
+  responseJson String?
+  fileUrl      String?
+  submittedAt  DateTime?
+  acceptedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id])
+}
+
+// ===== 审计 =====
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  accountId Int?
+  action    String
+  target    String?
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  account Account? @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+}
