@@ -113,7 +113,7 @@ const schema = z.object({
   JWT_SECRET: z.string().min(16).default('carbon-dev-secret-change-me-please'),
   JWT_TTL: z.string().default('7d'),
 
-  DATABASE_URL: z.string().default('file:./prisma/dev.db'),
+  DATABASE_URL: z.string().default('file:./dev.db'),
 
   INFLUX_URL: z.string().url().default('http://localhost:8086'),
   INFLUX_TOKEN: z.string().default('carbon-token-2026'),

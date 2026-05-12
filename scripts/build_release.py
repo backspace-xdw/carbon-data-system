@@ -294,13 +294,17 @@ def _file_note(path):
     return ""
 
 
+IMG_PATTERN = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)\s*$")
+
+
 def md_to_docx(md_path, out_path):
     from docx import Document
-    from docx.shared import Pt, Cm, RGBColor
+    from docx.shared import Pt, Cm, RGBColor, Inches
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     text = md_path.read_text(encoding="utf-8")
     doc = Document()
+    md_dir = md_path.parent
 
     # 全局字体
     style = doc.styles["Normal"]
@@ -359,6 +363,22 @@ def md_to_docx(md_path, out_path):
             doc.add_heading(line[3:].strip(), level=1)
         elif line.startswith("### "):
             doc.add_heading(line[4:].strip(), level=2)
+        elif IMG_PATTERN.match(line):
+            m = IMG_PATTERN.match(line)
+            alt, src = m.group(1), m.group(2).strip()
+            img_path = (md_dir / src).resolve()
+            if img_path.exists():
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.add_run().add_picture(str(img_path), width=Inches(5.6))
+                if alt:
+                    cap = doc.add_paragraph(alt)
+                    cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    for r in cap.runs:
+                        r.font.size = Pt(9)
+                        r.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            else:
+                doc.add_paragraph(f"[缺图: {src}]")
         elif line.strip() == "":
             doc.add_paragraph("")
         elif line.startswith("- "):
